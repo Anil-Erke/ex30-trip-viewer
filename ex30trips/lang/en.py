@@ -1,0 +1,317 @@
+"""English strings.
+
+Same keys and placeholders as `tr.py` (enforced by I18nTests). Plural forms use
+`{n|singular|plural}`: the word is picked from the value passed as `n`.
+
+Terminology follows the in-car app's English resources: "regen", "range bias",
+"SoC". Speed is km/h — the Turkish "km/s" means kilometres per hour
+(saat), which an English reader would take for per second.
+"""
+
+STRINGS: dict[str, str] = {
+    # --- General -------------------------------------------------------------
+    "app.title": "EX30 Trip Viewer",
+    "common.cancel": "Cancel",
+    "common.save": "Save",
+    "common.close": "Close",
+
+    # --- Units and durations -------------------------------------------------
+    "unit.speed": "km/h",
+    "duration.hm": "{h} h {m:02d} min",
+    "duration.ms": "{m} min {s:02d} s",
+    "duration.m": "{m} min",
+
+    # --- Menu ----------------------------------------------------------------
+    "menu.file": "File",
+    "menu.add_files": "Add files…\tCtrl+O",
+    "menu.add_folder": "Add folder…",
+    "menu.add_sample": "Add sample data",
+    "menu.drive_fetch": "Fetch from Drive\tCtrl+D",
+    "menu.drive_settings": "Drive settings…",
+    "menu.sources": "Loaded sources…",
+    "menu.clear": "Clear records",
+    "menu.reload": "Reload\tF5",
+    "menu.export_csv": "Export table to CSV…",
+    "menu.export_png": "Save chart as PNG…",
+    "menu.exit": "Exit",
+    "menu.language": "Dil / Language",
+    "menu.help": "Help",
+    "menu.help_source": "Where does the data come from?",
+    "menu.about": "About",
+
+    # --- Toolbar -------------------------------------------------------------
+    "toolbar.add_files": "Add files",
+    "toolbar.add_folder": "Add folder",
+    "toolbar.sample": "Sample data",
+    "toolbar.drive": "From Drive",
+    "toolbar.clear": "Clear",
+    "toolbar.period": "Period",
+    "toolbar.distance": "Distance",
+    "toolbar.export_csv": "Export CSV",
+
+    # --- Filters -------------------------------------------------------------
+    "period.all": "All records",
+    "period.7": "Last 7 days",
+    "period.30": "Last 30 days",
+    "period.90": "Last 90 days",
+    "period.365": "Last year",
+    "distance.all": "All",
+
+    # --- Summary cards -------------------------------------------------------
+    "kpi.trips": "Trips",
+    "kpi.km": "Distance (km)",
+    "kpi.duration": "Driving time",
+    "kpi.consumption": "Avg kWh/100 km",
+    "kpi.energy": "Net energy (kWh)",
+    "kpi.regen": "Regen (kWh)",
+    "kpi.speed": "Avg speed (km/h)",
+    "kpi.bias": "Range bias",
+
+    # --- Trip table ----------------------------------------------------------
+    "col.start": "Start",
+    "col.duration": "Duration",
+    "col.km": "km",
+    "col.consumption": "kWh/100",
+    "col.energy": "kWh",
+    "col.soc": "SoC ↓",
+    "col.speed": "Ø km/h",
+    "col.temp": "°C",
+
+    # --- Tabs ----------------------------------------------------------------
+    "tab.overview": "Overview",
+    "tab.consumption": "Consumption",
+    "tab.energy": "Energy",
+    "tab.battery": "Battery & range",
+    "tab.speed": "Speed & elevation",
+    "tab.detail": "Trip details",
+
+    # --- Trip details --------------------------------------------------------
+    "detail.none": "No trip selected",
+    "detail.hint": "Pick a trip from the list on the left.",
+    "detail.col.field": "Metric",
+    "detail.col.value": "Value",
+    "detail.sub": "{duration} · {km} km · ends {end} · schema {schema} · {source}",
+    "detail.no_source": "no source",
+    "detail.group.distance": "— Distance and time —",
+    "detail.group.energy": "— Energy —",
+    "detail.group.battery": "— Battery and range —",
+    "detail.group.speed": "— Speed, temperature, elevation —",
+    "detail.group.perf": "— Performance runs —",
+    "detail.gps_km": "GPS distance",
+    "detail.wheel_km": "Wheel distance",
+    "detail.gps_wheel": "GPS ÷ wheel",
+    "detail.duration": "Duration",
+    "detail.net": "Net consumption",
+    "detail.regen": "Regen",
+    "detail.gross": "Gross consumption",
+    "detail.regen_share": "Regen share",
+    "detail.consumption": "Consumption",
+    "detail.potential": "Potential energy of climbs",
+    "detail.soc": "SoC start → end",
+    "detail.soc_drop": "SoC drop",
+    "detail.range": "Range start → end",
+    "detail.range_drop": "Range drop",
+    "detail.bias": "Range gauge bias",
+    "detail.avg_speed": "Average speed",
+    "detail.max_speed": "Top speed",
+    "detail.temp": "Temperature start / average",
+    "detail.alt_gain": "Elevation gain",
+    "detail.alt_loss": "Elevation loss",
+    "detail.alt_net": "Net elevation",
+
+    # --- A4 performance runs (PerfKind) --------------------------------------
+    "perf.0-100": "0–100 km/h",
+    "perf.0-60": "0–60 km/h",
+    "perf.80-120": "80–120 km/h",
+    "perf.100-0": "100–0 km/h braking",
+
+    # --- Range gauge verdict (RangeAuditor.Verdict) --------------------------
+    "bias.accurate": "{factor} — gauge was accurate",
+    "bias.optimistic": "{factor} — {percent} optimistic",
+    "bias.pessimistic": "{factor} — {percent} pessimistic",
+
+    # --- Status bar ----------------------------------------------------------
+    "status.empty": "Add a trips-*.txt file exported from the car (Ctrl+O) or press 'Sample data'. Sources add up.",
+    "status.no_match": "No trips match the filter — widen the period or distance filter.",
+    "status.showing": "Showing {n} {n|trip|trips} from {first} to {last}",
+    "status.added": "{label}: {fresh} new {fresh|trip|trips} added · {total} in total across {sources} {sources|source|sources}",
+    "status.removed": "Removed '{label}' · {n} {n|trip|trips} left",
+    "status.reloaded": "Reloaded {n} {n|source|sources}.",
+    "status.drive_downloading": "Downloading from Drive…",
+    "status.drive_failed": "Could not download from Drive.",
+    "status.csv_saved": "CSV saved: {path}",
+    "status.png_saved": "Chart saved: {path}",
+    "files.sources": "{n} {n|source|sources}",
+    "files.files": "{n} {n|file|files}",
+    "files.trips": "{n} {n|trip|trips}",
+    "files.duplicates": "{n} {n|duplicate|duplicates} merged",
+    "files.failures": "{n} unreadable {n|file|files}",
+
+    # --- Sources -------------------------------------------------------------
+    "source.kind.file": "file",
+    "source.kind.folder": "folder",
+    "source.kind.sample": "sample",
+    "source.kind.drive": "Drive",
+    "source.kind.cli": "command line",
+    "sources.title": "Loaded sources",
+    "sources.intro": "The list on screen combines these sources; a trip found in more than one is counted once.",
+    "sources.col.kind": "Type",
+    "sources.col.label": "Source",
+    "sources.col.files": "Files",
+    "sources.col.trips": "Trips",
+    "sources.remove": "Remove selected",
+    "sources.clear_all": "Clear all",
+    "sources.none": "No sources yet. Use 'Add files', 'Add folder' or 'From Drive' — whatever you add accumulates.",
+
+    # --- Picking and loading files -------------------------------------------
+    "dialog.pick_files": "Choose trip files",
+    "dialog.pick_folder": "Choose a folder containing trips-*.txt",
+    "filetype.trips": "Trip records",
+    "filetype.text": "Text / JSON",
+    "filetype.all": "All files",
+    "load.failed": "No trip records could be read.",
+    "load.nothing_found": "There is no trips-*.txt at the selected location.",
+    "load.kept": "The records on screen are unchanged.",
+    "load.sample_missing": "Sample file not found:\n{path}",
+    "file.empty": "file is empty",
+    "file.bad_json": "JSON could not be parsed (line {line})",
+    "file.no_trips": "contains no trip records",
+    "file.unreadable": "none of the records could be read",
+
+    # --- Drive ---------------------------------------------------------------
+    "drive.settings.title": "Drive settings",
+    "drive.settings.intro": "To download the records uploaded by the in-car app:\nthe Apps Script web app address and its READ key.",
+    "drive.settings.url": "Address (/exec)",
+    "drive.settings.secret": "Read key",
+    "drive.settings.path": "Settings: {path}",
+    "drive.settings.both_required": "Both the address and the key are required.",
+    "drive.settings.save_failed": "Could not save the settings:\n{error}",
+    "drive.failed": "Could not download from Drive:\n\n{error}",
+    "drive.err.unexpected": "unexpected error: {error}",
+    "drive.err.empty": "the server returned an empty response",
+    "drive.err.not_json": "the response is not JSON — the address may be wrong, or the web app is not deployed with access 'Anyone'",
+    "drive.err.bad_shape": "the response is not in the expected format",
+    "drive.err.server": "{message}",
+    "drive.err.unknown_server": "unknown server error",
+    "drive.err.no_data": "the response contains no file content",
+    "drive.err.base64": "base64 decoding failed: {error}",
+    "drive.err.gzip": "gzip decompression failed: {error}",
+    "drive.err.size": "size mismatch: expected {expected}, got {got}",
+    "drive.err.not_configured": "The Drive address and key are not set",
+    "drive.err.http": "the server returned {code}",
+    "drive.err.connect": "could not connect: {reason}",
+    "drive.err.save": "could not save the downloaded file: {error}",
+
+    # --- Export --------------------------------------------------------------
+    "export.nothing": "No trips to export.",
+    "export.csv_title": "Save as CSV",
+    "export.csv_filename": "ex30-trips.csv",
+    "export.csv_failed": "Could not write the CSV:\n{error}",
+    "export.pick_chart": "Select a chart tab first.",
+    "export.png_title": "Save chart",
+    "csv.start": "Start",
+    "csv.end": "End",
+    "csv.duration": "Duration (s)",
+    "csv.gps_km": "GPS distance (km)",
+    "csv.wheel_km": "Wheel distance (km)",
+    "csv.net": "Net energy (kWh)",
+    "csv.regen": "Regen (kWh)",
+    "csv.consumption": "Consumption (kWh/100km)",
+    "csv.soc_start": "SoC start (%)",
+    "csv.soc_end": "SoC end (%)",
+    "csv.range_start": "Range start (km)",
+    "csv.range_end": "Range end (km)",
+    "csv.bias": "Range bias",
+    "csv.avg_speed": "Average speed (km/h)",
+    "csv.max_speed": "Top speed (km/h)",
+    "csv.temp": "Average temperature (°C)",
+    "csv.alt_gain": "Elevation gain (m)",
+    "csv.alt_loss": "Elevation loss (m)",
+    "csv.potential": "Potential energy (kWh)",
+    "csv.schema": "Schema",
+    "csv.source": "Source",
+
+    # --- Charts --------------------------------------------------------------
+    "chart.failed": "Could not draw the chart:\n{error}",
+    "chart.no_trips": "No trips to show.",
+    "chart.average": "average {value}",
+    "chart.day.ylabel": "daily distance (km)",
+    "chart.day.title": "Daily distance and cumulative total",
+    "chart.day.cumulative": "cumulative (km)",
+    "chart.band.title": "Consumption by outside temperature",
+    "chart.band.none": "No trips with measured energy:\nconsumption bands can't be computed.",
+    "chart.hist.xlabel": "trip length (km)",
+    "chart.hist.ylabel": "number of trips",
+    "chart.hist.title": "Trip length distribution",
+    "chart.hist.median": "median {value} km",
+    "chart.hist.none": "No trips with a distance.",
+    "chart.cons.none": "No trip has measured energy.\nConsumption comes from integrating battery power; if the car didn't report power, the field stays empty.",
+    "chart.cons.weighted": "energy-weighted average {value}",
+    "chart.cons.title": "Consumption per trip (dot size = distance)",
+    "chart.cons.speed.xlabel": "average speed (km/h)",
+    "chart.cons.speed.title": "Consumption ↔ average speed",
+    "chart.cons.temp.xlabel": "outside temperature (°C)",
+    "chart.cons.temp.title": "Consumption ↔ outside temperature",
+    "chart.no_speed": "No speed data.",
+    "chart.no_temp": "No temperature data.",
+    "chart.energy.none": "No trips with measured energy.",
+    "chart.energy.net": "net consumption",
+    "chart.energy.regen": "recovered by regen",
+    "chart.energy.title": "Energy per trip — net + regen = gross",
+    "chart.share.ylabel": "share of gross (%)",
+    "chart.share.title": "Regen share",
+    "chart.share.none": "No regen data.",
+    "chart.descent.xlabel": "total descent (m)",
+    "chart.descent.ylabel": "regen (kWh)",
+    "chart.descent.title": "Regen ↔ descent",
+    "chart.descent.none": "No elevation or regen data.",
+    "chart.battery.none": "No trips with battery or range data.",
+    "chart.soc.start": "start SoC",
+    "chart.soc.end": "end SoC",
+    "chart.soc.title": "State of charge per trip — the gap is what the trip used",
+    "chart.soc.none": "No SoC data.",
+    "chart.bias.ylabel": "range drop ÷ km",
+    "chart.bias.title": "How accurate is the range gauge",
+    "chart.bias.note": "above 1.0: optimistic · below: pessimistic",
+    "chart.bias.none": "No trips over {km} km\nwith a measured range drop.",
+    "chart.range.xlabel": "distance driven (km)",
+    "chart.range.ylabel": "range drop (km)",
+    "chart.range.title": "Range drop ↔ distance (dashed: one-to-one)",
+    "chart.range.none": "No range data.",
+    "chart.speed.average": "average",
+    "chart.speed.top": "top",
+    "chart.speed.title": "Average and top speed",
+    "chart.alt.climb": "climb",
+    "chart.alt.descent": "descent",
+    "chart.alt.ylabel": "metres",
+    "chart.alt.title": "Elevation gain and loss",
+    "chart.alt.none": "No elevation data.",
+    "chart.ratio.ylabel": "GPS ÷ wheel",
+    "chart.ratio.title": "GPS distance ↔ wheel distance",
+    "chart.ratio.none": "No wheel distance:\nrecords predate schema 3.",
+
+    # --- Help ----------------------------------------------------------------
+    "help.source": (
+        "The records come from trips.json, kept by the EX30 Telemetry / "
+        "EX30 Route Analysis app in the car.\n\n"
+        "In the car, press 'Export'. The file comes out as "
+        "trips-YYYYMMDD-HHMM.txt; after moving it to the computer over "
+        "Bluetooth or Wi-Fi, open it here with 'Add files'. If you used "
+        "'Upload to Drive' in the car, 'From Drive' fetches it directly.\n\n"
+        "Sources add up: after fetching the latest records from Drive you can "
+        "add the folder with older exports and both are shown together. A trip "
+        "present in both is kept once, using the copy with more fields.\n\n"
+        "'Clear' drops everything; 'Loaded sources…' removes them one by one."
+    ),
+    "help.about": (
+        "{title}\n\n"
+        "Shows trip records exported from a Volvo EX30 as charts on the "
+        "desktop.\n\n"
+        "Averages use the same definitions as TripStats in the car: "
+        "consumption is energy-weighted, range bias is distance-weighted.\n\n"
+        "Python {python} · matplotlib {mpl}"
+    ),
+
+    # --- Startup -------------------------------------------------------------
+    "startup.missing": "{name} is not installed.\n\nTo install it:\n    py -m pip install matplotlib\n\nDetails: {detail}",
+}
