@@ -126,7 +126,7 @@ telefon yok.
 `%LOCALAPPDATA%\EX30TripViewer\drive.json` içine yazılıyor, kaynağa ya da exe'ye
 gömülmüyor. Sonradan değiştirmek için *Dosya → Drive ayarları…*.
 
-Ucun kurulumu EX30 Telemetry deposunda: `drive-sync/README.md`. **Buraya yazılan
+Ucun kurulumu EX30 Telemetry deposunda: [drive-sync/README.tr.md](https://github.com/Anil-Erke/ex30-telemetry/blob/main/drive-sync/README.tr.md). **Buraya yazılan
 anahtar okuma anahtarı**, araçtaki uygulamanın yazma anahtarı değil — ikisi
 bilerek ayrı.
 

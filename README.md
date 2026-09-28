@@ -65,7 +65,7 @@ Use **Sample data** in the toolbar to try it without a car.
    Bluetooth or Wi-Fi), then open it here with *Add files* or *Add folder*.
 
 **Or, from Google Drive (optional):** if you set up the Drive endpoint described
-in the EX30 Telemetry repository (`drive-sync/README.md`), press **From Drive**
+in the EX30 Telemetry repository ([drive-sync/README.md](https://github.com/Anil-Erke/ex30-telemetry/blob/main/drive-sync/README.md)), press **From Drive**
 (Ctrl+D). The URL and the **read key** are asked for on first use and stored only
 on your PC in `%LOCALAPPDATA%\EX30TripViewer\drive.json`, never in the code or
 the exe. The read key is deliberately different from the car's write key.
