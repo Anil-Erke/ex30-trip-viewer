@@ -2,7 +2,7 @@
 
 [English](README.md) · **Türkçe**
 
-Volvo EX30'dan dışa aktarılan yolculuk kayıtlarını Windows'ta grafikle gösteren
+Volvo EX30'dan gelen yolculuk kayıtlarını Windows'ta grafikle gösteren
 masaüstü uygulaması. Python + Tkinter + matplotlib; kurulum gerektirmez,
 klasörden doğrudan çalışır.
 
@@ -21,16 +21,33 @@ klasörden doğrudan çalışır.
 
 <sub>Ekran görüntüleri depodaki örnek veriyle (`ornek/trips-ornek.txt`) alındı.</sub>
 
-Araçtaki **EX30 Telemetry** uygulaması yolculukları `trips.json` içine yazıyor
-(`trip/TripStore.kt`). Dışa aktarımda dosya `trips-YYYYAAGG-SSDD.txt` adıyla
-çıkıyor (`calib/DataExporter.kt`). Bu uygulama o dosyayı okuyor.
+Veri iki yoldan gelir:
+
+- **Google Drive (önerilen):** araçtaki [EX30 Telemetry](https://github.com/Anil-Erke/ex30-telemetry) her yolculuğu
+  kendi Drive'ınıza yükler; burada aynı Google hesabıyla girip **Drive'dan al**
+  dersiniz. GPS izi de gelir (Rota sekmesi). Ayrıntı: [Drive'dan alma](#drivedan-alma).
+- **Dosya:** EX30 Telemetry'nin *Dışa aktar* düğmesi `trips.json`'u araçta
+  `trips-YYYYAAGG-SSDD.txt` adıyla yazar (`calib/DataExporter.kt`); dosyayı
+  bilgisayara taşıyıp *Dosya ekle* ile açarsınız.
 
 ## Derlemeden önce doldurmanız gerekenler
 
-**Hiçbiri.** Uygulama olduğu gibi çalışır. İsteğe bağlı *Drive'dan al* özelliği
-için adres ve okuma anahtarı uygulamanın içinden (*Dosya → Drive ayarları…*)
-girilir ve yalnızca sizin bilgisayarınızda
-`%LOCALAPPDATA%\EX30TripViewer\drive.json` içinde saklanır; koda gömülmez.
+Dosyadan okuma ve örnek veri için **hiçbir şey**. Yalnızca **Google Drive**
+için kendi Google Cloud OAuth istemciniz gerekir:
+
+| Ne | Nerede | Zorunlu mu? |
+|---|---|---|
+| *Desktop app* türünde OAuth istemcisi | `oauth.properties` içinde `desktopClientId` ve `desktopClientSecret` | Drive için evet; exe üretmek için de (`exe-olustur.ps1` istemciyi gömer) |
+
+İstemciyi, araçtaki uygulamanın istemcisiyle **aynı Google Cloud projesinde**
+açın; başka projedeki bir istemci aracın yüklediği dosyaları göremez. Adım adım
+kurulum: EX30 Telemetry README'si,
+[Google Drive eşitleme](https://github.com/Anil-Erke/ex30-telemetry/blob/main/README.tr.md#google-drive-eşitleme-isteğe-bağlı).
+Şablon olarak oradaki `oauth.properties.example` dosyasını kullanabilirsiniz.
+
+`oauth.properties` dosyasını bu projenin köküne koyun ya da yolunu
+`EX30_OAUTH_PROPERTIES` ortam değişkeniyle verin. `oauth.properties` ve ondan
+üretilen `ex30trips/_oauth.py` `.gitignore` içindedir: **asla depoya eklemeyin.**
 
 ## Çalıştırma
 
@@ -117,26 +134,129 @@ kaç yinelenen kaydın elendiğini yazıyor.
 
 ## Drive'dan alma
 
-Araçtaki uygulamanın **"Drive'a aktar"** düğmesi kayıtları bir Google Drive
-klasörüne yüklüyor. Buradaki **"Drive'dan al"** düğmesi (Ctrl+D) aynı klasörden
-`trips.json`'u indirip yüklü kaynaklara ekliyor — dosya taşımak, USB,
-telefon yok.
+Araçtaki **EX30 Telemetry** her yolculuğu bitince, sürücünün araçta bağladığı
+**Google hesabının kendi Drive'ına** yüklüyor: yolculuğun **özeti** ve **1 Hz
+GPS izi** ayrı dosyalar. Arada sunucu yok; her kullanıcı kendi hesabıyla
+bağlanıyor, veriler birbirine karışmıyor. Buradaki **"Drive'dan al"** düğmesi
+(Ctrl+D) aynı hesabın Drive'ındaki yeni özetleri indirip yüklü kaynaklara
+ekliyor — dosya taşımak, USB, telefon yok.
 
-İlk kullanımda adres ve **okuma anahtarı** soruluyor; ikisi de
-`%LOCALAPPDATA%\EX30TripViewer\drive.json` içine yazılıyor, kaynağa ya da exe'ye
-gömülmüyor. Sonradan değiştirmek için *Dosya → Drive ayarları…*.
+Protokolün tek kaynağı EX30 Telemetry deposundaki
+[`drive-sync/PROTOKOL.md`](https://github.com/Anil-Erke/ex30-telemetry/blob/main/drive-sync/PROTOKOL.md) (**sürüm 3**). Buradaki karşılığı `ex30trips/drive.py`
+(Drive REST) ve `ex30trips/auth.py` (Google girişi); protokol değişecekse önce o
+dosya değişir, araç, telefon ve bu uygulama birlikte etkileniyor.
 
-Ucun kurulumu EX30 Telemetry deposunda: [drive-sync/README.tr.md](https://github.com/Anil-Erke/ex30-telemetry/blob/main/drive-sync/README.tr.md). **Buraya yazılan
-anahtar okuma anahtarı**, araçtaki uygulamanın yazma anahtarı değil — ikisi
-bilerek ayrı.
+### Google hesabı
 
-İndirilen dosya `%LOCALAPPDATA%\EX30TripViewer\indirilen\trips.json` altında
-kalıyor, böylece ağ yokken de F5 ile tekrar açılabiliyor.
+*Dosya → Google hesabı…* bağlı e-postayı gösteriyor, **Giriş** ve **Çıkış**
+buradan. Hesap bağlı değilken "Drive'dan al" önce bu pencereyi açıyor, giriş
+yapılınca indirmeye kendiliğinden devam ediyor.
+
+- Giriş tarayıcıda: "Desktop app" türündeki OAuth istemcisiyle **loopback +
+  PKCE** (`http://127.0.0.1:<rastgele port>`). Her girişte hesap seçimi
+  soruluyor — aynı bilgisayarda başka biri kendi hesabıyla girebilsin.
+- İzin **yalnızca `drive.file`** (+ hangi hesap olduğunu göstermek için
+  `openid email`). Uygulama Drive'da yalnızca aynı Cloud projesindeki EX30
+  istemcilerinin oluşturduğu dosyaları görüyor, kişinin geri kalan Drive'ına
+  erişimi yok. **Drive'a hiçbir şey yazmıyor.**
+- **İzin kutusu tuzağı:** Google'ın onay ekranında Drive kutusu boş
+  bırakılabiliyor; giriş başarılı görünür ama her Drive çağrısı 403 döner.
+  Token yanıtındaki `scope`'ta `drive.file` yoksa giriş reddediliyor ve "onay
+  ekranında Drive kutusunu işaretle" deniyor. Aynı denetim her token
+  yenilemesinde de var.
+- Refresh token `%LOCALAPPDATA%\EX30TripViewer\hesap.json` içinde, **DPAPI**
+  ile şifreli (`ctypes` + `CryptProtectData`; Windows oturumuna bağlı, dosyayı
+  başka kullanıcıya ya da bilgisayara kopyalamak işe yaramıyor). Access token
+  yalnızca bellekte.
+- Google `invalid_grant` derse (erişim geri alındı, token öldü) token siliniyor
+  ve yeniden giriş isteniyor.
+- **Çıkış** token'ı siliyor (Google'da da iptal ediyor), o hesabın önbelleğini
+  ve imlecini siliyor, o önbellekten yüklenmiş Drive kaynağını ekrandan
+  kaldırıyor. Drive'daki dosyalara dokunulmuyor; yeniden girince hepsi iner.
+
+### Artımlı eşitleme (PROTOKOL.md §4)
+
+- Drive REST v3 `files.list`:
+  `appProperties has { key='ex30' and value='trip' } and trashed=false and createdTime > '<imleç − 5 dk>'`,
+  `orderBy=createdTime`, `pageSize=1000`, `nextPageToken` bitene kadar sayfalı.
+  Dosyalar yol ya da adla değil **`appProperties`** ile bulunuyor; kullanıcı bir
+  dosyayı taşısa ya da adını değiştirse de eşleşme bozulmuyor.
+- **İmleç** görülen en büyük `createdTime` (RFC 3339) — yolculuk zamanı değil
+  Drive'a **eklenme** zamanı: araç ağ yokken biriktirdiği eski bir yolculuğu
+  günler sonra yüklese de gelir. Bir sonraki istekte **5 dakika geri** çekilerek
+  kullanılıyor (Drive listesi yeni dosyayı gecikmeyle gösterebiliyor); örtüşme
+  yüzünden iki listede birden gelen dosya `ex30id` ile tekleniyor.
+- Yerelde olmayan her özet `files/<id>?alt=media` ile **ham bayt** olarak
+  iniyor (dört paralel istek) ve **`md5Checksum` ile doğrulanıyor**; tutmazsa
+  diske hiçbir şey yazılmıyor, eldeki dosyaya dokunulmuyor. Durum çubuğunda
+  "Drive: 12/300 özet indiriliyor…".
+- **İmleç ancak listedeki her şey indiyse ilerliyor.** Bir özet inmezse inenler
+  diskte kalıyor, imleç yerinde; bir sonraki "Drive'dan al" aynı listeyi alıp
+  yalnızca kalanları deniyor.
+- **Boşluk denetimi:** Drive'da sürüm 2'deki `toplam` yok. Yerine ilk
+  eşitlemede, **günde en az bir kez** ve *Dosya → Drive'ı baştan tara* ile
+  **imleçsiz tam liste** alınıyor; yerelde olmayan her şey iniyor. Tam liste
+  yalnızca metadata (1000 dosya başına tek istek). Durum çubuğu son tam taramanın
+  zamanını yazıyor.
+- Hata ölçütü **HTTP durum kodu**: 401 → token yenilenip bir kez tekrar
+  deneniyor, yenisi de reddedilirse yeniden giriş · 403 `insufficientPermissions`
+  → Drive izni yok, yeniden giriş · 429 / 403 `rateLimitExceeded` / 5xx → 1, 2,
+  4 sn geri çekilip tekrar · 404 → dosya Drive'da yok. Drive'ın kendi hata
+  iletisi olduğu gibi gösteriliyor.
+- İzler eşitlemede **inmiyor**, yalnızca Drive kimlikleri kaydediliyor;
+  yolculuk açılınca iniyor (bkz. Rota sekmesi).
+
+### Sürüm 2'den geçiş
+
+İlk açılışta eski Apps Script ayarı (`drive.json`: adres + okuma anahtarı),
+imleç (`esitleme.json`) ve sürüm 2 önbelleği (`yolculuklar\`, `indirilen\`)
+varsa **bir kez** siliniyor ve kısa bir not gösteriliyor. İçlerinde sürüm 3'te
+yeniden inmeyecek bir şey yok (PROTOKOL.md §4.1): araç hesap bağlanınca
+içindeki bütün yolculukları Drive'a gönderiyor. Dil ayarı (`settings.json`)
+kalıyor. Apps Script'in oluşturduğu dosyalar zaten görünmüyor — `drive.file`
+kuralı gereği iki dünya ayrı.
+
+### Önbellek
+
+Hesap başına ayrı, `%LOCALAPPDATA%\EX30TripViewer\` altında:
+
+| Yol | Ne |
+|---|---|
+| `hesap.json` | bağlı hesabın e-postası + DPAPI ile şifreli refresh token |
+| `hesaplar\<e-posta>\esitleme.json` | imleç (`createdTime`), son tam tarama zamanı, izi olan yolculukların Drive kimlikleri |
+| `hesaplar\<e-posta>\yolculuklar\<yyyy>\<MM>\trip-<e>.json` | özetler — Drive'daki `EX30 Trips/yolculuklar/` ile aynı yıl/ay düzeni (İstanbul saati) |
+| `hesaplar\<e-posta>\yolculuklar\<yyyy>\<MM>\trip-<e>.csv.gz` | GPS izleri, Drive'daki gzip'li hâliyle baytı baytına |
+| `settings.json` | arayüz dili |
+
+Dosyalar Drive'da asla değişmediği için bir kez inen tekrar inmiyor; yazma
+önce `.part` dosyasına, sonra yerine yapılıyor ki yarım kalan dosya "inmiş"
+sayılmasın. **Drive kaynağı hesabın `yolculuklar\` klasörünün tamamı**: 300
+yolculuk sınırı olmadan birikmiş bütün geçmiş, ağ yokken de F5 ile açılıyor.
+Özet tek bir JSON nesnesi (dizi değil); `loader` onu tek yolculuk olarak
+okuyor, `startEpoch` teklemesi ve "zengin kopya kazanır" kuralı aynen geçerli.
+
+### OAuth istemcisi
+
+Masaüstü istemcisinin kimliği ve sırrı **depoya girmiyor**. Kaynak
+`oauth.properties` (`desktopClientId`, `desktopClientSecret`).
+Derleme sırasında `araclar\oauth-gom.py` bunları `ex30trips\_oauth.py`'ye
+yazıyor (`.gitignore`'da) ve exe'ye o giriyor. Kaynaktan çalışırken
+`_oauth.py` yoksa `oauth.properties` doğrudan okunuyor (`EX30_OAUTH_PROPERTIES`
+ortam değişkeni, proje kökü ya da yan klasör olarak tam bu adla duran
+`EX30 Telemetry\`; GitHub'dan klonlanan `ex30-telemetry` klasörüne bakılmaz). Google
+masaüstü uygulamalarında bu değerleri gizli saymıyor — tek başlarına hiçbir
+veriye erişim vermiyorlar; kişisel erişim her kullanıcının kendi token'ında.
+
+Cloud Console'da izin ekranı **"In production"** durumunda olmalı: "Testing"
+durumunda refresh token 7 günde ölüyor (`drive.file` hassas izin değil, Google
+incelemesi gerekmiyor).
 
 ## Bağımlılık
 
 Gereken tek bağımlılık
-matplotlib (numpy'yi kendisi getiriyor):
+matplotlib (numpy'yi kendisi getiriyor). Rota haritası, Google girişi ve Drive
+REST için de yeni bağımlılık eklenmedi — hepsi standart kütüphane (`urllib`,
+`http.server`, DPAPI için `ctypes`):
 
 ```
 py -3 -m pip install -r requirements.txt
@@ -151,7 +271,9 @@ Tkinter, Windows'taki Python kurulumunda hazır gelir.
 ```
 
 Betik sırasıyla Python'u bulur, eksik bağımlılıkları kurar, birim testlerini
-çalıştırır, ikonu üretir ve PyInstaller ile paketler. Testler geçmezse derleme
+çalıştırır, ikonu üretir, Google OAuth istemcisini gömer
+(`araclar\oauth-gom.py` → `ex30trips\_oauth.py`; `oauth.properties`
+bulunamazsa derleme durur) ve PyInstaller ile paketler. Testler geçmezse derleme
 yapılmaz — bozuk kod exe'ye girmesin. Çift tıklamayla çalıştırmak için
 `exe-olustur.bat` var (PowerShell politika engeline takılmadan çağırıyor).
 
@@ -192,9 +314,38 @@ detay sekmesi açılır.
 | Enerji | Net + rejen = brüt yığılmış bar, rejen payı, rejen ↔ iniş |
 | Batarya & menzil | Yolculuk başına SoC başlangıç→bitiş, gösterge menzil sapması, menzil düşüşü ↔ gerçek mesafe |
 | Hız & rakım | Ortalama–azami hız, rakım kazancı/kaybı, GPS ↔ tekerlek mesafesi |
-| Yolculuk detayı | Seçili yolculuğun bütün alanları ve A4 performans ölçümleri |
+| Yolculuk detayı | Seçili yolculuğun bütün alanları, A4 performans ölçümleri ve GPS izinin durumu |
+| Rota | Seçili yolculuğun GPS izi: rota çizimi, irtifa profili, hız ve güç |
 
-Seçili yolculuk bütün grafiklerde vurgulanıyor. Grafiklerin altındaki araç
+Seçili yolculuk bütün grafiklerde vurgulanıyor.
+
+### Rota sekmesi
+
+İz, yolculuk detayı ya da Rota sekmesi açıkken iniyor (listede gezinirken her
+satır için Drive'a gidilmiyor) ve hesabın önbelleğinde kalıyor. Bu hesapla
+eşitlendiyse izi olan yolculuklar zaten biliniyor (listede `tur=iz` kaydı olmayan
+yolculuğun izi yok), izi olmayan yolculukta ağa çıkmadan "iz yok" yazıyor
+(0.7.2 öncesi yolculuklar, GPS'siz sürüş). Hiç eşitlenmemişse iz `ex30id` ile
+Drive'da aranıyor. Google hesabı bağlı değilse iz de yok.
+
+- **Rota** — enlem/boylam; çizginin rengi hıza, güce ya da irtifaya göre
+  seçiliyor. Güçte skala iki yönlü: sıfır ortada, rejen (negatif) yeşil,
+  tüketim turuncu→kırmızı. Harita karosu yok, yalnızca matplotlib — en-boy
+  oranı enleme göre düzeltiliyor (İstanbul'da boylamın bir derecesi enlemin
+  ~%75'i; düzeltilmezse doğu-batı yolları uzun görünür).
+- **İrtifa profili** — ham GPS irtifası + 15 noktalık kayan ortalama (eksik
+  noktayı atlıyor, sıfır saymıyor).
+- **Hız** (gösterge + GPS) ve **güç** — rejen bölgeleri yeşil.
+
+Üç profilin x ekseni aynı mesafe (`dist_m`, km) ve **bağlı**: birini
+yakınlaştırınca üçü birlikte gidiyor, haritada da o aralık vurgulanıyor.
+
+İz biçimi (PROTOKOL.md §3.2) `ex30trips/track.py`'de okunuyor: ilk satırdaki
+biçim sürümü bilinmiyorsa iz okunmuyor ve bu söyleniyor; sütunlar **adla**
+okunuyor (araç sütun ekleyebilir, sırayı değiştirebilir); boş alan None.
+
+**Dosya → İzi CSV'ye aktar…** (ya da Rota sekmesindeki düğme) seçili izi
+tablo CSV'siyle aynı kurallarla yazıyor. Grafiklerin altındaki araç
 çubuğuyla yakınlaştırma/kaydırma yapılabiliyor; **Dosya → Grafiği PNG kaydet**
 görünen sekmeyi dosyaya basıyor.
 
@@ -237,15 +388,18 @@ doğru ayrılıyor; başlıklar da seçili dilde.
 ex30trips/
   model.py    Trip / PerfRecord — trip/Trip.kt'nin Python karşılığı
   loader.py   dosya okuma, klasör tarama, kaynakları birleştirme/tekleme
+  drive.py    Drive protokol 3: REST ağ katmanı, artımlı eşitleme, hesap önbelleği, iz indirme
+  auth.py     Google girişi: loopback + PKCE, DPAPI'li token, yenileme, çıkış
+  track.py    GPS izi ayrıştırma + iz CSV'si
   stats.py    toplamlar; TripStats.kt ile aynı tanımlar
-  charts.py   matplotlib çizimleri (pencereyi tanımaz)
+  charts.py   matplotlib çizimleri, Rota dahil (pencereyi tanımaz)
   theme.py    tek renk paleti: ttk + matplotlib
   i18n.py     dil seçimi, t(), sayı/tarih/süre/CSV biçimleri
   lang/       tr.py + en.py — metin tabloları
   settings.py kalıcı tercihler (dil)
   app.py      Tkinter penceresi
 main.py       PyInstaller giriş betiği (paket mantığı ex30trips'te)
-araclar/      ikon üretici, ortam denetleyici
+araclar/      ikon üretici, ortam denetleyici, OAuth istemcisini gömen oauth-gom.py
 assets/       ex30.ico + önizleme
 ornek/        araçtan çıkmış örnek dışa aktarım
 screenshots/  README görselleri
@@ -261,10 +415,42 @@ yüzden pencere açmadan PNG'ye basılabiliyor ve test edilebiliyor.
 py -3 -m unittest discover -s tests
 ```
 
-47 test: gerçek örnek dosyanın okunması, eksik alanların None kalması, şema 1
+83 test: gerçek örnek dosyanın okunması, eksik alanların None kalması, şema 1
 uyumluluğu, birleştirmede zengin kopyanın kazanması, bozuk dosyanın yüklemeyi
-düşürmemesi, kaynakların birikmesi, Drive yanıtının çözümlenmesi, enerji
-ağırlıklı ortalama ve mesafe ağırlıklı menzil sapması.
+düşürmemesi, kaynakların birikmesi, enerji ağırlıklı ortalama ve mesafe
+ağırlıklı menzil sapması.
+
+Drive testleri ağa çıkmıyor. `FakeDrive`, Drive REST v3'ün okuma uçlarının
+bellekteki karşılığı: gerçek `HttpApi`'nin istek adreslerini ve `q` sorgusunu
+çözüp gerçek JSON gövdesi döndürüyor; sahte ile gerçek istemci arasında
+yalnızca HTTP yok.
+
+- **Ağ katmanı (DriveApiTests):** `files.list` satırlarının çözümlenmesi
+  (tanınmayan satır atlanıyor), **sayfalama** (`nextPageToken`), RFC 3339
+  imleçli sorgu, `alt=media` + **MD5 denetimi**, **401 → yenile + bir kez
+  tekrar** (yenisi de reddedilirse yeniden giriş, sonsuz döngü yok), 403
+  `insufficientPermissions` → token unutuluyor, 429 / hız sınırında geri
+  çekilme, 404 ve Drive'ın hata iletisinin aktarılması.
+- **Eşitleme (SyncTests):** ilk eşitlemede tam liste ve imleç, sonrakinde
+  **imleç − 5 dk**, örtüşmede geç görünen dosyanın kaçmaması, aynı dosyanın
+  **`ex30id` ile teklenmesi**, bir özet inmezse **imlecin ilerlememesi** ve
+  yalnızca kalanın yeniden denenmesi, liste hatasında hiçbir şeyin değişmemesi,
+  **MD5 tutmazsa eldekinin ezilmemesi**, **günlük tam tarama kararı** ve "baştan
+  tara", tam listede çöpe atılan izin unutulması, iz indirme ve "iz yok"un ağa
+  çıkmadan bilinmesi, hesap başına İstanbul saatine göre ay klasörü.
+- **Giriş (AuthTests):** tarayıcı taklidiyle baştan sona loopback + PKCE
+  girişi, **Drive kutusu boşsa girişin reddi**, DPAPI ile şifreli saklama,
+  yenileme ve **`invalid_grant` → token'ın silinmesi**, yenilemede izin
+  denetimi, çıkışın yalnızca o hesabın önbelleğini silmesi.
+- **Geçiş (MigrationTests):** sürüm 2 ayarının ve önbelleğinin **bir kez**
+  silinmesi, dil ayarının ve hesap önbelleklerinin kalması.
+
+İz testleri (TrackTests): ayrıştırma, sütun sırası değişse de aynı değerler,
+bilinmeyen sütun ve sürüm, başka yolculuğun izi, gzip, `dist_m` yoksa konumdan
+mesafe, iki dilde iz CSV'si. Tek nesne özetin (kendi `records` alanıyla)
+tek yolculuk okunması. Rota grafiği iki dilde, üç renk seçeneğiyle; dolu, kısa,
+konumsuz, boş ve iz yokken PNG'ye çiziliyor; bağlı eksenler ve haritadaki
+vurgu da sınanıyor.
 
 Dil testleri (I18nTests): iki tablonun anahtar ve yer tutucu eşitliği, koddaki
 her anahtarın tabloda olması, iki dilde sayı/tarih/süre/CSV biçimleri, çoğul

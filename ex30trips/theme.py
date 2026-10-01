@@ -58,7 +58,9 @@ def apply(root: tk.Misc) -> ttk.Style:
     style.map(
         "TButton",
         background=[("pressed", ACCENT), ("active", "#2c3440")],
-        foreground=[("pressed", "#0b0e12")],
+        # Devre dışı düğme soluk: hesap penceresinde Giriş/Çıkış'tan hangisinin
+        # geçerli olduğu yalnızca buradan anlaşılıyor.
+        foreground=[("disabled", MUTED), ("pressed", "#0b0e12")],
     )
 
     style.configure("TSeparator", background=LINE)

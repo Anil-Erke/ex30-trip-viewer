@@ -12,3 +12,8 @@ dist/
 .vscode/
 .claude/
 .DS_Store
+
+# Google OAuth client - never commit / GIZLI - asla depoya eklemeyin
+oauth.properties
+ex30trips/_oauth.py
+*client_secret*.json

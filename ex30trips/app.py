@@ -39,78 +39,133 @@ from matplotlib.backends.backend_tkagg import (  # noqa: E402
 )
 from matplotlib.figure import Figure  # noqa: E402
 
-from . import charts, drive, i18n, settings, stats, theme  # noqa: E402
+from . import auth, charts, drive, i18n, settings, stats, theme  # noqa: E402
+from . import track as gps  # noqa: E402
 from .i18n import num, t  # noqa: E402
 from .loader import LoadResult, Source, combine, load  # noqa: E402
 from .model import Trip  # noqa: E402
 
 
-class DriveSettingsDialog(tk.Toplevel):
-    """Drive ucunun adresi ve okuma anahtarı.
+class AccountDialog(tk.Toplevel):
+    """Google hesabı: bağlı e-posta, giriş ve çıkış (PROTOKOL.md §1).
 
-    Değerler `%LOCALAPPDATA%` altındaki ayar dosyasına yazılıyor; kaynağa ya da
-    exe'ye gömülmüyorlar. Anahtar alanı maskeli: ekran paylaşımında ya da
-    ekran görüntüsünde kazara görünmesin.
+    Giriş tarayıcıda yapılıyor; bu pencere o sırada "tarayıcıda onayla" yazıp
+    bekliyor. Bekleme arka thread'de (`auth.sign_in`), sonuç kuyrukla ana
+    thread'e geçiyor — Drive eşitlemesiyle aynı düzen. Pencere kapatılırsa
+    bekleme iptal ediliyor ve yerel dinleyici kapanıyor.
+
+    Modal: "Drive'dan al" hesap yokken bu pencereyi açıp kapanmasını bekliyor,
+    giriş yapıldıysa indirmeye kendiliğinden devam ediyor.
     """
 
-    def __init__(self, parent: tk.Misc, config: drive.Config) -> None:
+    def __init__(self, parent: "TripViewer") -> None:
         super().__init__(parent)
-        self.result: drive.Config | None = None
+        self.app = parent
+        self._cancel: threading.Event | None = None
+        self._queue: queue.Queue[tuple[str, object]] = queue.Queue()
+        self._poll_id: str | None = None
 
-        self.title(t("drive.settings.title"))
+        self.title(t("account.title"))
         self.resizable(False, False)
         self.transient(parent)
+        self.configure(background=theme.BG)
 
         frame = ttk.Frame(self, padding=16)
         frame.pack(fill="both", expand=True)
-
-        ttk.Label(
-            frame,
-            text=t("drive.settings.intro"),
-            style="Muted.TLabel",
-            justify="left",
-        ).grid(row=0, column=0, columnspan=2, sticky="w", pady=(0, 12))
-
-        ttk.Label(frame, text=t("drive.settings.url")).grid(row=1, column=0, sticky="w", padx=(0, 10))
-        self.url_var = tk.StringVar(value=config.url)
-        url_entry = ttk.Entry(frame, textvariable=self.url_var, width=62)
-        url_entry.grid(row=1, column=1, sticky="ew", pady=4)
-
-        ttk.Label(frame, text=t("drive.settings.secret")).grid(row=2, column=0, sticky="w", padx=(0, 10))
-        self.secret_var = tk.StringVar(value=config.secret)
-        ttk.Entry(frame, textvariable=self.secret_var, width=62, show="•").grid(
-            row=2, column=1, sticky="ew", pady=4
+        ttk.Label(frame, text=t("account.intro"), style="Muted.TLabel", justify="left").pack(
+            anchor="w", pady=(0, 14)
         )
-
-        ttk.Label(
-            frame,
-            text=t("drive.settings.path", path=drive.config_path()),
-            style="Muted.TLabel",
-        ).grid(row=3, column=0, columnspan=2, sticky="w", pady=(10, 0))
+        self.state_label = ttk.Label(frame, text="", justify="left")
+        self.state_label.pack(anchor="w")
+        self.note_label = ttk.Label(frame, text="", style="Muted.TLabel", justify="left")
+        self.note_label.pack(anchor="w", pady=(6, 0))
 
         buttons = ttk.Frame(frame)
-        buttons.grid(row=4, column=0, columnspan=2, sticky="e", pady=(16, 0))
-        ttk.Button(buttons, text=t("common.cancel"), command=self.destroy).pack(side="right", padx=(6, 0))
-        ttk.Button(buttons, text=t("common.save"), command=self._save).pack(side="right")
+        buttons.pack(fill="x", pady=(16, 0))
+        self.sign_in_button = ttk.Button(buttons, text=t("account.sign_in"), command=self._sign_in)
+        self.sign_in_button.pack(side="left")
+        self.sign_out_button = ttk.Button(buttons, text=t("account.sign_out"), command=self._sign_out)
+        self.sign_out_button.pack(side="left", padx=(8, 0))
+        self.close_button = ttk.Button(buttons, text=t("common.close"), command=self._close)
+        self.close_button.pack(side="right")
 
-        self.bind("<Return>", lambda _e: self._save())
-        self.bind("<Escape>", lambda _e: self.destroy())
-
-        url_entry.focus_set()
+        self.protocol("WM_DELETE_WINDOW", self._close)
+        self.bind("<Escape>", lambda _e: self._close())
+        self._render()
         self.grab_set()
         self.wait_window(self)
 
-    def _save(self) -> None:
-        config = drive.Config(url=self.url_var.get().strip(), secret=self.secret_var.get().strip())
-        if not config.ready:
-            messagebox.showwarning(t("app.title"), t("drive.settings.both_required"), parent=self)
-            return
+    def _render(self) -> None:
+        session = self.app.session
+        waiting = self._cancel is not None
+        if waiting:
+            self.state_label.config(text=t("account.waiting"))
+            self.note_label.config(text="")
+        elif session is not None:
+            self.state_label.config(text=t("account.connected", email=session.email))
+            self.note_label.config(text=t("account.stored", path=auth.account_path()))
+        else:
+            self.state_label.config(text=t("account.none"))
+            self.note_label.config(text="")
+        # Bağlıyken "Giriş" kapalı: hesap değiştirmek önce çıkış demek, yoksa
+        # eski hesabın önbelleği sahipsiz kalırdı.
+        self.sign_in_button.state(["disabled"] if waiting or session is not None else ["!disabled"])
+        self.sign_out_button.state(["!disabled"] if session is not None and not waiting else ["disabled"])
+        self.close_button.config(text=t("common.cancel") if waiting else t("common.close"))
+
+    def _sign_in(self) -> None:
+        cancel = threading.Event()
+        self._cancel = cancel
+        q = self._queue
+
+        def work() -> None:
+            try:
+                q.put(("done", auth.sign_in(cancel)))
+            except drive.DriveError as e:
+                q.put(("error", e))
+            except Exception as e:  # beklenmedik hata da pencereye ulaşsın
+                q.put(("error", drive.DriveError("drive.err.unexpected", error=e)))
+
+        threading.Thread(target=work, name="GoogleSignIn", daemon=True).start()
+        self._render()
+        self._poll_id = self.after(150, self._poll)
+
+    def _poll(self) -> None:
         try:
-            drive.save_config(config)
-        except OSError as e:
-            messagebox.showerror(t("app.title"), t("drive.settings.save_failed", error=e), parent=self)
+            kind, payload = self._queue.get_nowait()
+        except queue.Empty:
+            self._poll_id = self.after(150, self._poll)
             return
-        self.result = config
+        self._poll_id = None
+        self._cancel = None
+        if kind == "done":
+            self.app.set_session(payload)
+            # Tarayıcıdan dönen kullanıcıyı bir "Kapat" daha beklemesin.
+            self.destroy()
+            return
+        self._render()
+        messagebox.showerror(t("app.title"), t("account.failed", error=payload), parent=self)
+
+    def _sign_out(self) -> None:
+        session = self.app.session
+        if session is None:
+            return
+        if self.app._drive_busy:
+            messagebox.showinfo(t("app.title"), t("account.busy"), parent=self)
+            return
+        if not messagebox.askyesno(
+            t("app.title"), t("account.sign_out_confirm", email=session.email), parent=self
+        ):
+            return
+        self.app.sign_out()
+        self._render()
+
+    def _close(self) -> None:
+        if self._cancel is not None:
+            self._cancel.set()
+        if self._poll_id is not None:
+            # Yıkılan pencerenin zamanlayıcısı "invalid command name" basar.
+            self.after_cancel(self._poll_id)
         self.destroy()
 
 
@@ -254,6 +309,9 @@ def resource_path(relative: str) -> Path:
 class TripViewer(tk.Tk):
     #: Sol sütunun (özet + tablo) başlangıç genişliği.
     LEFT_WIDTH = 570
+    #: Sekme sırası: CHARTS'taki grafikler, yolculuk detayı, rota.
+    DETAIL_TAB = len(charts.CHARTS)
+    ROUTE_TAB = len(charts.CHARTS) + 1
 
     def __init__(self, initial_paths: list[Path] | None = None) -> None:
         super().__init__()
@@ -275,9 +333,23 @@ class TripViewer(tk.Tk):
         self._canvases: dict[int, FigureCanvasTkAgg] = {}
         self._sort_column = "start"
         self._sort_reverse = True
-        #: Drive indirmesi arka thread'de; sonuç buradan ana thread'e geçiyor.
-        self._drive_queue: queue.Queue[tuple[Path | None, str | None]] = queue.Queue()
+        #: Drive eşitlemesi arka thread'de; ilerleme ve sonuç buradan ana
+        #: thread'e geçiyor: ("progress", done, total) | ("done", SyncResult) |
+        #: ("error", metin).
+        self._drive_queue: queue.Queue[tuple] = queue.Queue()
         self._drive_busy = False
+        #: Bağlı Google hesabı; yoksa None. Diskteki token açılışta çözülüyor
+        #: (DPAPI, ağ yok); access token ilk Drive isteğinde alınıyor.
+        self.session: auth.Session | None = auth.load_session()
+        #: GPS izleri, startEpoch ile. İz yüklenemediyse sebebi `_track_notes`'ta
+        #: (dil anahtarı + isteğe bağlı hata nesnesi): dil değişince yeni dilde
+        #: yeniden yazılabilsin diye metin olarak saklanmıyor.
+        self._tracks: dict[int, gps.Track] = {}
+        self._track_notes: dict[int, tuple[str, Exception | None]] = {}
+        self._track_pending: set[int] = set()
+        self._track_queue: queue.Queue[tuple[int, Path | None, Exception | None]] = queue.Queue()
+        self._route_color = charts.ROUTE_COLORS[0]
+        self._route_dirty = True
         #: Dil menüsündeki işaretli düğme; yeniden kurulumlar arasında yaşıyor.
         self.language_var = tk.StringVar(value=i18n.language())
 
@@ -294,6 +366,12 @@ class TripViewer(tk.Tk):
             self.add_paths(initial_paths, "cli")
         else:
             self._refresh()
+
+        # Sürüm 2'nin adres + okuma anahtarı ve önbelleği (PROTOKOL.md §4.1).
+        # Not pencere açıldıktan sonra: ana pencere yokken çıkan ileti
+        # kutusu görev çubuğunda sahipsiz kalıyor.
+        if drive.migrate_v2():
+            self.after(400, lambda: messagebox.showinfo(t("app.title"), t("drive.migrated")))
 
     # --- Arayüz kurulumu -----------------------------------------------------
 
@@ -313,13 +391,15 @@ class TripViewer(tk.Tk):
         file_menu.add_command(label=t("menu.add_sample"), command=self.open_sample)
         file_menu.add_separator()
         file_menu.add_command(label=t("menu.drive_fetch"), command=self.fetch_from_drive)
-        file_menu.add_command(label=t("menu.drive_settings"), command=self.edit_drive_settings)
+        file_menu.add_command(label=t("menu.drive_rescan"), command=lambda: self.fetch_from_drive(full=True))
+        file_menu.add_command(label=t("menu.account"), command=self.show_account)
         file_menu.add_separator()
         file_menu.add_command(label=t("menu.sources"), command=self.show_sources)
         file_menu.add_command(label=t("menu.clear"), command=self.clear_sources)
         file_menu.add_command(label=t("menu.reload"), command=self.reload)
         file_menu.add_separator()
         file_menu.add_command(label=t("menu.export_csv"), command=self.export_csv)
+        file_menu.add_command(label=t("menu.export_track"), command=self.export_track_csv)
         file_menu.add_command(label=t("menu.export_png"), command=self.export_png)
         file_menu.add_separator()
         file_menu.add_command(label=t("menu.exit"), command=self.destroy)
@@ -469,7 +549,7 @@ class TripViewer(tk.Tk):
         scroll.pack(side="right", fill="y")
 
         self.tree.bind("<<TreeviewSelect>>", self._on_select)
-        self.tree.bind("<Double-1>", lambda _e: self.tabs.select(len(charts.CHARTS)))
+        self.tree.bind("<Double-1>", lambda _e: self.tabs.select(self.DETAIL_TAB))
 
     def _build_tabs(self, parent: ttk.Frame) -> None:
         self.tabs = ttk.Notebook(parent)
@@ -490,7 +570,43 @@ class TripViewer(tk.Tk):
             self._canvases[index] = canvas
 
         self._build_detail_tab()
+        self._build_route_tab()
         self.tabs.bind("<<NotebookTabChanged>>", lambda _e: self._draw_current())
+
+    def _build_route_tab(self) -> None:
+        frame = ttk.Frame(self.tabs, style="Panel.TFrame")
+        self.tabs.add(frame, text=t("tab.route"))
+
+        controls = ttk.Frame(frame, style="Panel.TFrame", padding=(12, 8, 12, 0))
+        controls.pack(side="top", fill="x")
+        ttk.Label(controls, text=t("route.color"), style="PanelMuted.TLabel").pack(side="left", padx=(0, 6))
+        self.route_color_box = ttk.Combobox(
+            controls,
+            state="readonly",
+            width=10,
+            values=[t(f"route.color.{key}") for key in charts.ROUTE_COLORS],
+        )
+        self.route_color_box.current(charts.ROUTE_COLORS.index(self._route_color))
+        self.route_color_box.pack(side="left")
+        self.route_color_box.bind("<<ComboboxSelected>>", lambda _e: self._on_route_color())
+        ttk.Button(controls, text=t("route.export"), command=self.export_track_csv).pack(side="right")
+
+        figure = Figure(figsize=(8, 6), dpi=100, layout="constrained")
+        canvas = FigureCanvasTkAgg(figure, master=frame)
+        canvas.get_tk_widget().configure(background=theme.PANEL, highlightthickness=0)
+        toolbar = ChartToolbar(canvas, frame, pack_toolbar=False)
+        toolbar.update()
+        self._style_toolbar(toolbar)
+        toolbar.pack(side="bottom", fill="x")
+        canvas.get_tk_widget().pack(side="top", fill="both", expand=True)
+        self._figures[self.ROUTE_TAB] = figure
+        self._canvases[self.ROUTE_TAB] = canvas
+        self._route_dirty = True
+
+    def _on_route_color(self) -> None:
+        self._route_color = charts.ROUTE_COLORS[self.route_color_box.current()]
+        self._route_dirty = True
+        self._draw_current()
 
     def _style_toolbar(self, toolbar: NavigationToolbar2Tk) -> None:
         """Matplotlib araç çubuğu ttk değil; renklerini elle veriyoruz.
@@ -616,7 +732,7 @@ class TripViewer(tk.Tk):
         paths = filedialog.askopenfilenames(
             title=t("dialog.pick_files"),
             filetypes=[
-                (t("filetype.trips"), "trips*.txt trips*.json"),
+                (t("filetype.trips"), "trips*.txt trips*.json trip-*.json"),
                 (t("filetype.text"), "*.txt *.json"),
                 (t("filetype.all"), "*.*"),
             ],
@@ -636,13 +752,57 @@ class TripViewer(tk.Tk):
             return
         self.add_paths([sample], "sample")
 
-    def edit_drive_settings(self) -> bool:
-        """Ayar penceresini açar. @return kaydedildiyse True."""
-        dialog = DriveSettingsDialog(self, drive.load_config())
-        return dialog.result is not None
+    # --- Google hesabı ve Drive ---------------------------------------------
 
-    def fetch_from_drive(self) -> None:
-        """Araçtan Drive'a yüklenmiş `trips.json`'u indirip açar.
+    def show_account(self) -> None:
+        AccountDialog(self)
+
+    def set_session(self, session: auth.Session) -> None:
+        """Giriş yapıldı. İz durumları önceki hesaba (ya da hesapsızlığa)
+        göreydi; "Drive bağlı değil" notları artık geçersiz."""
+        self.session = session
+        self._forget_tracks()
+        self.status.config(text=t("status.signed_in", email=session.email))
+
+    def sign_out(self) -> None:
+        """Çıkış: token ve o hesabın önbelleği silinir (`auth.sign_out`); o
+        önbellekten yüklenmiş Drive kaynağı da ekrandan kalkar — dosyaları
+        artık yok, F5 onu boş okurdu. Başka kaynaklara dokunulmuyor."""
+        session = self.session
+        if session is None:
+            return
+        self.session = None
+        cache_root = drive.AccountCache(session.email).root
+        auth.sign_out(session)
+        self.sources = [
+            s for s in self.sources
+            if not (s.kind == "drive" and any(p.is_relative_to(cache_root) for p in s.paths))
+        ]
+        self._forget_tracks()
+        self._recombine()
+        self._refresh()
+        self.status.config(text=t("status.signed_out", email=session.email))
+
+    def _forget_tracks(self) -> None:
+        self._tracks.clear()
+        self._track_notes.clear()
+        self._route_dirty = True
+
+    def _live_session(self) -> auth.Session | None:
+        """Kullanılabilir oturum. Token arka planda ölmüş olabilir (yenileme
+        `invalid_grant` aldı); o zaman oturum burada da düşüyor."""
+        if self.session is not None and self.session.dead:
+            self.session = None
+        return self.session
+
+    def fetch_from_drive(self, full: bool = False) -> None:
+        """Drive'daki yeni yolculuk özetlerini indirip açar (`drive.sync`).
+
+        Artımlı: yalnızca son eşitlemeden sonra Drive'a eklenenler iniyor,
+        inenler hesabın önbelleğinde birikiyor ve Drive kaynağı o klasörün
+        tamamı. `full` ("Drive'ı baştan tara") imleçsiz tam liste istiyor;
+        günde bir kez bu kendiliğinden de oluyor. Hesap bağlı değilse önce
+        giriş penceresi açılıyor.
 
         Ağ çağrısı ARKA THREAD'de: Tkinter tek thread'li ve indirme ana
         thread'de yapılırsa pencere indirme boyunca donar.
@@ -654,51 +814,104 @@ class TripViewer(tk.Tk):
         """
         if self._drive_busy:
             return
-
-        config = drive.load_config()
-        if not config.ready:
-            if not self.edit_drive_settings():
+        if self._live_session() is None:
+            self.show_account()
+            if self._live_session() is None:
                 return
-            config = drive.load_config()
-            if not config.ready:
-                return
+        session = self.session
+        cache = drive.AccountCache(session.email)
+        api = drive.HttpApi(session)
 
         self._drive_busy = True
         self.drive_button.state(["disabled"])
         self.status.config(text=t("status.drive_downloading"))
 
+        q = self._drive_queue
+
         def work() -> None:
             try:
-                path = drive.download(config)
+                result = drive.sync(
+                    api, cache, full=full, progress=lambda done, total: q.put(("progress", done, total))
+                )
             except drive.DriveError as e:
-                self._drive_queue.put((None, str(e)))
+                q.put(("error", e))
             except Exception as e:  # beklenmedik hata da arayüze ulaşsın
-                self._drive_queue.put((None, t("drive.err.unexpected", error=e)))
+                q.put(("error", drive.DriveError("drive.err.unexpected", error=e)))
             else:
-                self._drive_queue.put((path, None))
+                q.put(("done", (session.email, result)))
 
         threading.Thread(target=work, name="DriveFetch", daemon=True).start()
         self.after(150, self._poll_drive)
 
     def _poll_drive(self) -> None:
-        try:
-            path, error = self._drive_queue.get_nowait()
-        except queue.Empty:
+        # İlerleme iletileri sonuçtan önce geliyor; hepsini bir seferde boşalt,
+        # yoksa 400 özetlik ilk eşitlemede durum çubuğu geriden gelir.
+        final = None
+        while final is None:
+            try:
+                message = self._drive_queue.get_nowait()
+            except queue.Empty:
+                break
+            if message[0] == "progress":
+                _kind, done, total = message
+                if total:
+                    self.status.config(text=t("status.drive_progress", done=done, total=total))
+            else:
+                final = message
+        if final is None:
             self.after(150, self._poll_drive)
             return
 
         self._drive_busy = False
         self.drive_button.state(["!disabled"])
 
-        if error is not None:
+        kind, payload = final
+        if kind == "error":
             self.status.config(text=t("status.drive_failed"))
-            messagebox.showerror(t("app.title"), t("drive.failed", error=error))
+            if payload.relogin:
+                # Token öldü ya da Drive izni yok: yeniden girişten başka
+                # çare yok. Kabul edilirse giriş, ardından indirme yeniden.
+                self._live_session()
+                if messagebox.askyesno(t("app.title"), t("drive.relogin", error=payload)):
+                    self.fetch_from_drive()
+                return
+            messagebox.showerror(t("app.title"), t("drive.failed", error=payload))
+            return
+        email, result = payload
+        self._drive_synced(email, result)
+
+    def _drive_synced(self, email: str, result: drive.SyncResult) -> None:
+        """Eşitleme sonucunu ekrana taşır. Kaynak yolu hesap başına hep aynı:
+        Drive'dan ikinci kez alındığında yeni bir kaynak eklenmiyor, duran
+        kaynak tazesiyle değişiyor."""
+        if self.session is None or self.session.email != email:
+            return  # indirme sürerken çıkış yapıldı; önbellek artık yok
+
+        if result.local == 0:
+            self.status.config(text=t("status.drive_none"))
+            messagebox.showinfo(t("app.title"), t("drive.no_summaries"))
             return
 
-        assert path is not None
-        # İndirilen dosyanın yolu hep aynı: Drive'dan ikinci kez alındığında
-        # yeni bir kaynak eklenmiyor, duran kaynak tazesiyle değişiyor.
-        self.add_paths([path], "drive", "Drive (trips.json)")
+        # İz listesi eşitlemeyle değişti: "iz yok" denmiş yolculukların izi
+        # artık gelmiş olabilir.
+        self._track_notes.clear()
+        self._route_dirty = True
+        fresh = self.add_paths([result.path], "drive", f"Drive · {email}")
+        if fresh is None:
+            return
+        # Son tam tarama UTC saklanıyor, yerel saatle gösteriliyor.
+        full = i18n.date_time(result.last_full.astimezone().replace(tzinfo=None)) if result.last_full else "—"
+        parts = [
+            t("status.drive_synced", email=email, new=result.new_trips, local=result.local, full=full)
+        ]
+        if result.failed or result.errors:
+            parts.append(t("status.drive_partial", n=result.failed))
+        self.status.config(text=" · ".join(parts))
+        if result.errors:
+            messagebox.showwarning(
+                t("app.title"),
+                t("drive.partial", n=result.failed, errors="\n".join(f"· {e}" for e in result.errors)),
+            )
 
     def reload(self) -> None:
         """Yüklü bütün kaynakları diskten yeniden okur (F5).
@@ -722,8 +935,10 @@ class TripViewer(tk.Tk):
             return paths[0].name or str(paths[0])
         return f"{paths[0].name} +{len(paths) - 1}"
 
-    def add_paths(self, paths: list[Path], kind: str = "file", label: str | None = None) -> None:
+    def add_paths(self, paths: list[Path], kind: str = "file", label: str | None = None) -> int | None:
         """Yeni bir kaynağı yüklü olanların ÜSTÜNE ekler.
+
+        @return eklenen yeni yolculuk sayısı; hiçbir şey okunamadıysa None.
 
         Eklemek yerine değiştirmek, Drive'daki son 10 günü göstermek için eski
         kayıtların durduğu klasörden vazgeçmek demekti. Artık ikisi de listede:
@@ -738,7 +953,7 @@ class TripViewer(tk.Tk):
             if self.sources:
                 parts.append(t("load.kept"))
             messagebox.showerror(t("app.title"), "\n\n".join(parts))
-            return
+            return None
 
         source = Source(
             kind=kind,
@@ -768,6 +983,7 @@ class TripViewer(tk.Tk):
                     total=len(self.all_trips),
                 )
             )
+        return fresh
 
     def remove_source(self, index: int) -> None:
         """Tek bir kaynağı çıkarır; geri kalanlar yeniden okunmadan kalır."""
@@ -845,6 +1061,7 @@ class TripViewer(tk.Tk):
         self._fill_kpis()
         self._fill_detail()
         self._dirty = set(range(len(charts.CHARTS)))
+        self._route_dirty = True
         self._draw_current()
 
         if not self.all_trips:
@@ -951,6 +1168,7 @@ class TripViewer(tk.Tk):
         self.selected = int(selection[0]) if selection else None
         self._fill_detail()
         self._dirty = set(range(len(charts.CHARTS)))
+        self._route_dirty = True
         self._draw_current()
 
     def _fill_detail(self) -> None:
@@ -1006,6 +1224,8 @@ class TripViewer(tk.Tk):
             rows.append((t("detail.group.perf"), ""))
             for record in trip.records:
                 rows.append((record.label, f"{record.pretty()} · {i18n.clock(record.when)}"))
+        rows.append((t("detail.group.track"), ""))
+        rows.append((t("detail.track"), self._track_summary(trip)))
 
         stripe = 0
         for field, value in rows:
@@ -1022,6 +1242,15 @@ class TripViewer(tk.Tk):
 
     def _draw_current(self) -> None:
         index = self.tabs.index(self.tabs.select())
+        if index in (self.DETAIL_TAB, self.ROUTE_TAB):
+            # İz yalnızca bu iki sekmeden biri açıkken isteniyor: listede
+            # gezinirken her satır için Drive'a gidilmesin.
+            trip = self._selected_trip()
+            if trip is not None:
+                self._ensure_track(trip)
+        if index == self.ROUTE_TAB:
+            self._draw_route()
+            return
         if index >= len(charts.CHARTS):  # detay sekmesi
             return
         if index not in self._dirty:
@@ -1037,6 +1266,118 @@ class TripViewer(tk.Tk):
             ax.text(0.5, 0.5, t("chart.failed", error=e), ha="center", va="center", color=theme.RED)
         self._canvases[index].draw_idle()
         self._dirty.discard(index)
+
+    # --- GPS izi ve rota -----------------------------------------------------
+
+    def _ensure_track(self, trip: Trip) -> None:
+        """Seçili yolculuğun izini hazırlar: önbellekte varsa okur, yoksa
+        arka thread'de Drive'dan indirir. Sonuç gelince detay ve rota yenilenir.
+
+        Ağa çıkmadan "iz yok" denebiliyor: bu hesapla eşitlendiyse izi olan
+        bütün yolculuklar biliniyor (`drive.track_known_missing`). İzler hesabın
+        önbelleğinde; hesap yoksa iz de yok.
+        """
+        epoch = trip.start_epoch
+        if epoch in self._tracks or epoch in self._track_notes or epoch in self._track_pending:
+            return
+        session = self._live_session()
+        if session is None:
+            self._track_notes[epoch] = ("route.no_drive", None)
+            self._track_changed(epoch)
+            return
+        cache = drive.AccountCache(session.email)
+        path = cache.track_path(epoch)
+        if path.exists():
+            self._load_track(epoch, path)
+            return
+        if drive.track_known_missing(cache, epoch):
+            self._track_notes[epoch] = ("route.no_track", None)
+        else:
+            self._track_pending.add(epoch)
+            q = self._track_queue
+            api = drive.HttpApi(session)
+
+            def work() -> None:
+                try:
+                    q.put((epoch, drive.download_track(api, cache, epoch), None))
+                except Exception as e:  # DriveError dahil; metne ana thread'de dönüyor
+                    q.put((epoch, None, e))
+
+            threading.Thread(target=work, name="TrackFetch", daemon=True).start()
+            self.after(150, self._poll_tracks)
+        self._track_changed(epoch)
+
+    def _poll_tracks(self) -> None:
+        while True:
+            try:
+                epoch, path, error = self._track_queue.get_nowait()
+            except queue.Empty:
+                break
+            self._track_pending.discard(epoch)
+            if error is not None:
+                self._track_notes[epoch] = ("route.failed", error)
+                self._track_changed(epoch)
+            elif path is None:
+                self._track_notes[epoch] = ("route.no_track", None)
+                self._track_changed(epoch)
+            else:
+                self._load_track(epoch, path)
+        if self._track_pending:
+            self.after(150, self._poll_tracks)
+
+    def _load_track(self, epoch: int, path: Path) -> None:
+        try:
+            self._tracks[epoch] = gps.read(path, expected_epoch=epoch)
+        except (gps.TrackError, OSError) as e:
+            self._track_notes[epoch] = ("route.failed", e)
+        self._track_changed(epoch)
+
+    def _track_changed(self, epoch: int) -> None:
+        """İzin durumu değişti; o yolculuk hâlâ seçiliyse ekranı tazele."""
+        trip = self._selected_trip()
+        if trip is None or trip.start_epoch != epoch:
+            return
+        self._fill_detail()
+        self._route_dirty = True
+        if self.tabs.index(self.tabs.select()) == self.ROUTE_TAB:
+            self._draw_route()
+
+    def _track_note(self, epoch: int) -> str | None:
+        """İz yoksa ekranda yazacak sebep; iz yüklüyse None."""
+        if epoch in self._tracks:
+            return None
+        if epoch in self._track_pending:
+            return t("route.downloading")
+        note = self._track_notes.get(epoch)
+        if note is None:
+            return t("route.not_loaded")
+        key, error = note
+        return t(key, error=error) if error is not None else t(key)
+
+    def _track_summary(self, trip: Trip) -> str:
+        """Detay sekmesindeki "GPS izi" satırı."""
+        track = self._tracks.get(trip.start_epoch)
+        if track is not None:
+            return t("detail.track.points", n=num(track.rows, 0))
+        return (self._track_note(trip.start_epoch) or "").replace("\n", " ")
+
+    def _draw_route(self) -> None:
+        if not self._route_dirty:
+            return
+        figure = self._figures[self.ROUTE_TAB]
+        figure.clear()
+        trip = self._selected_trip()
+        track = self._tracks.get(trip.start_epoch) if trip is not None else None
+        message = self._track_note(trip.start_epoch) if trip is not None else t("route.none")
+        try:
+            charts.draw_route(figure, track, self._route_color, message)
+        except Exception as e:  # tek bir grafik hatası uygulamayı düşürmesin
+            figure.clear()
+            ax = figure.add_subplot(111)
+            ax.set_axis_off()
+            ax.text(0.5, 0.5, t("chart.failed", error=e), ha="center", va="center", color=theme.RED)
+        self._canvases[self.ROUTE_TAB].draw_idle()
+        self._route_dirty = False
 
     # --- Dışa aktarma --------------------------------------------------------
 
@@ -1098,13 +1439,38 @@ class TripViewer(tk.Tk):
             return
         self.status.config(text=t("status.csv_saved", path=path))
 
+    def export_track_csv(self) -> None:
+        """Seçili yolculuğun GPS izini CSV'ye yazar — tablo CSV'siyle aynı
+        kurallar: ayraç, ondalık ve tarih arayüz diline göre, UTF-8 BOM."""
+        trip = self._selected_trip()
+        track = self._tracks.get(trip.start_epoch) if trip is not None else None
+        if track is None:
+            messagebox.showinfo(t("app.title"), t("export.track_nothing"))
+            return
+        path = filedialog.asksaveasfilename(
+            title=t("export.csv_title"),
+            defaultextension=".csv",
+            initialfile=t("export.track_filename", stamp=track.start_dt.strftime("%Y%m%d-%H%M")),
+            filetypes=[("CSV", "*.csv")],
+        )
+        if not path:
+            return
+        try:
+            with open(path, "w", encoding="utf-8-sig", newline="") as fh:
+                gps.write_csv(track, fh)
+        except OSError as e:
+            messagebox.showerror(t("app.title"), t("export.csv_failed", error=e))
+            return
+        self.status.config(text=t("status.csv_saved", path=path))
+
     def export_png(self) -> None:
         index = self.tabs.index(self.tabs.select())
-        if index >= len(charts.CHARTS):
+        if index == self.DETAIL_TAB or index not in self._figures:
             messagebox.showinfo(t("app.title"), t("export.pick_chart"))
             return
         # Dosya adı sekmenin görünen adından: ex30-genel-bakış.png / ex30-overview.png
-        name = t(charts.CHARTS[index][0]).lower().replace(" & ", "-").replace(" ", "-")
+        title_key = "tab.route" if index == self.ROUTE_TAB else charts.CHARTS[index][0]
+        name = t(title_key).lower().replace(" & ", "-").replace(" ", "-")
         path = filedialog.asksaveasfilename(
             title=t("export.png_title"),
             defaultextension=".png",

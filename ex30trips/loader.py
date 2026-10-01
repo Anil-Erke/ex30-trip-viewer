@@ -4,6 +4,10 @@ Araçtan çıkan dosya, EX30 Telemetry / EX30 Yol Analizi'nin `trips.json`
 içeriğidir; dışa aktarımda adı `trips-<damga>.txt` olur (DataExporter). İçerik
 her iki halde de aynı: yolculuk nesnelerinden oluşan bir JSON dizisi.
 
+Drive'da (protokol 2 ve 3) her yolculuğun özeti ayrı dosya (`trip-<startEpoch>.json`):
+aynı biçimde TEK bir yolculuk nesnesi, dizi değil. Drive önbelleği bu
+dosyalardan oluşan bir klasör; klasör taraması onları da buluyor.
+
 Aynı yolculuk birden çok dışa aktarımda bulunur — dosyalar birleştirilirken
 `startEpoch` anahtarıyla teklenir, alanı daha dolu olan kopya kazanır.
 
@@ -23,8 +27,8 @@ from typing import Iterable, Sequence
 from . import i18n
 from .model import Trip
 
-#: Klasör tarandığında bakılan desenler.
-PATTERNS = ("trips*.json", "trips*.txt")
+#: Klasör tarandığında bakılan desenler. `trip-*.json` Drive'daki yolculuk özeti.
+PATTERNS = ("trips*.json", "trips*.txt", "trip-*.json")
 
 
 class TripFileError(Exception):
@@ -97,11 +101,16 @@ def combine(sources: Iterable[Source]) -> LoadResult:
 def _extract(payload: object) -> list[dict]:
     """JSON gövdesinden yolculuk nesnelerini çıkarır.
 
-    Dizi beklenir; ileride sarmalayıcı bir nesne ({"trips": [...]}) gelirse diye
-    o biçim de kabul ediliyor.
+    Dizi (`trips.json`) ya da tek yolculuk nesnesi (Drive özeti) olabilir;
+    ileride sarmalayıcı bir nesne ({"trips": [...]}) gelirse diye o biçim de
+    kabul ediliyor. Tek nesne `startEpoch`'undan tanınıyor ve bu denetim
+    sarmalayıcıdan ÖNCE: özetin kendi `records` alanı (performans ölçümleri)
+    yolculuk listesi sanılırsa özet sessizce kaybolurdu.
     """
     if isinstance(payload, list):
         items = payload
+    elif isinstance(payload, dict) and "startEpoch" in payload:
+        items = [payload]
     elif isinstance(payload, dict):
         items = payload.get("trips") or payload.get("records") or []
     else:

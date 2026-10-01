@@ -20,14 +20,18 @@ import math
 from datetime import datetime
 from typing import Callable, Sequence
 
+import matplotlib
 import matplotlib.dates as mdates
 import numpy as np
+from matplotlib.collections import LineCollection
+from matplotlib.colors import LinearSegmentedColormap, Normalize, TwoSlopeNorm
 from matplotlib.figure import Figure
 from matplotlib.lines import Line2D
 from matplotlib.ticker import Formatter, MaxNLocator
 
 from . import i18n, stats, theme
 from .model import Trip
+from .track import Track
 
 #: Sekme adı → çizim fonksiyonu eşlemesi app.py tarafından kuruluyor.
 ChartFn = Callable[[Figure, Sequence[Trip], int | None], None]
@@ -623,3 +627,252 @@ CHARTS: tuple[tuple[str, ChartFn], ...] = (
     ("tab.battery", draw_battery),
     ("tab.speed", draw_speed),
 )
+
+
+# --- Rota (seçili yolculuğun GPS izi) -------------------------------------------
+# Yolculuk listesiyle değil tek bir izle çalıştığı için CHARTS'ta değil; sekmesini
+# app.py ayrıca kuruyor. Harita karosu YOK: yalnızca matplotlib, yeni bağımlılık
+# ve ağ isteği olmasın. En-boy oranı enleme göre düzeltiliyor ki rota basık
+# görünmesin.
+
+#: Rota çizgisinin renklendirme seçenekleri (lang: route.color.<ad>).
+ROUTE_COLORS: tuple[str, ...] = ("speed", "power", "alt")
+
+#: İrtifa profilindeki kayan ortalamanın genişliği (nokta). İz ~1 Hz; ham GPS
+#: irtifası metrelerce zıplıyor, 15 s'lik pencere eğimi bozmadan yumuşatıyor.
+ALT_SMOOTH_POINTS = 15
+
+#: Güç renk skalası: rejen (negatif) yeşil, sıfır nötr gri, tüketim turuncu→kırmızı.
+#: Nötr ton zeminden açık: sabit hızda süzülen parça koyu zeminde kaybolmasın.
+POWER_CMAP = LinearSegmentedColormap.from_list(
+    "ex30_power", [theme.GREEN, theme.MUTED, theme.ORANGE, theme.RED]
+)
+
+#: Rota çizgisinde değeri olmayan parçanın rengi — skaladaki hiçbir tonla
+#: karışmasın diye zeminle nötr gri arası.
+ROUTE_MISSING = "#566070"
+
+
+def _smooth(values: np.ndarray, window: int) -> np.ndarray:
+    """NaN'ı atlayan ortalanmış kayan ortalama. Eksik nokta sıfır sayılsaydı
+    profilde sahte çukurlar çıkardı."""
+    ok = np.isfinite(values)
+    # `convolve(..., "same")` pencereden kısa dizide pencere boyunda sonuç
+    # veriyor; birkaç noktalık izde pencere izin kendisine iniyor.
+    window = min(window, values.size)
+    if window <= 1 or not ok.any():
+        return values.copy()
+    kernel = np.ones(window)
+    total = np.convolve(np.where(ok, values, 0.0), kernel, mode="same")
+    count = np.convolve(ok.astype(float), kernel, mode="same")
+    with np.errstate(invalid="ignore", divide="ignore"):
+        out = total / count
+    out[~ok] = np.nan
+    return out
+
+
+def _route_scale(color_by: str, values: np.ndarray):
+    """(renk haritası, normalleştirme, etiket) — renklendirilecek değer yoksa None."""
+    finite = values[np.isfinite(values)]
+    if finite.size == 0:
+        return None
+    lo, hi = float(finite.min()), float(finite.max())
+    if color_by == "power":
+        # İki yönlü: sıfır her zaman ortada. Yalnızca tüketim ya da yalnızca
+        # rejen olan izde de TwoSlopeNorm'un iki yanı boş kalmasın.
+        norm = TwoSlopeNorm(vcenter=0.0, vmin=min(lo, -1.0), vmax=max(hi, 1.0))
+        cmap = POWER_CMAP.copy()
+        label = i18n.t("route.power.label")
+    elif color_by == "alt":
+        norm = Normalize(lo, hi if hi > lo else lo + 1.0)
+        cmap = matplotlib.colormaps["viridis"].copy()
+        label = i18n.t("route.alt.label")
+    else:
+        norm = Normalize(0.0, hi if hi > 0 else 1.0)
+        cmap = matplotlib.colormaps["plasma"].copy()
+        label = i18n.t("route.speed.label")
+    # Değeri olmayan parça sönük çiziliyor, atlanmıyor: rota kopuk görünmesin.
+    cmap.set_bad(ROUTE_MISSING)
+    return cmap, norm, label
+
+
+def _shade_regen(ax, x: np.ndarray, kw: np.ndarray) -> None:
+    """Rejen bölgelerini (kw < 0) eksenin bütün yüksekliğinde hafifçe boyar."""
+    regen = np.isfinite(kw) & (kw < 0)
+    if not regen.any():
+        return
+    ax.fill_between(
+        x,
+        0,
+        1,
+        where=regen,
+        transform=ax.get_xaxis_transform(),
+        color=theme.GREEN,
+        alpha=0.12,
+        linewidth=0,
+        step="mid",
+        zorder=0,
+        label=i18n.t("route.power.regen"),
+    )
+
+
+def _note(ax, text: str) -> None:
+    ax.text(0.5, 0.5, text, transform=ax.transAxes, ha="center", va="center",
+            color=theme.MUTED, fontsize=9)
+
+
+def draw_route(
+    fig: Figure,
+    track: Track | None,
+    color_by: str = "speed",
+    message: str | None = None,
+) -> None:
+    """Seçili yolculuğun rotası + mesafe eksenli irtifa, hız ve güç profilleri.
+
+    Profillerin x ekseni bağlı (`sharex`): biri yakınlaştırılınca üçü birden
+    gelir, haritada da o aralık vurgulanır. `message`: iz yoksa ortada
+    gösterilecek sebep (iz yok, indiriliyor, hata…).
+    """
+    if track is None:
+        _empty(fig, message or i18n.t("route.none"))
+        return
+    if track.rows == 0:
+        _empty(fig, i18n.t("route.empty"))
+        return
+
+    x = track.distance_m() / 1000.0
+    lat, lon = track.array("lat"), track.array("lon")
+    alt = track.array("alt")
+    speed = track.speed_kmh()
+    kw = track.array("kw")
+
+    gs = fig.add_gridspec(3, 2, width_ratios=(1.1, 1))
+    ax_map = fig.add_subplot(gs[:, 0])
+    ax_alt = fig.add_subplot(gs[0, 1])
+    ax_speed = fig.add_subplot(gs[1, 1], sharex=ax_alt)
+    ax_kw = fig.add_subplot(gs[2, 1], sharex=ax_alt)
+
+    has_x = bool(np.isfinite(x).any())
+    fig.suptitle(
+        i18n.t(
+            "route.title",
+            when=i18n.date_time(track.start_dt),
+            km=i18n.num(float(np.nanmax(x)) if has_x else None, 1),
+            points=i18n.num(track.rows, 0),
+        ),
+        color=theme.TEXT,
+        fontsize=11,
+    )
+
+    # --- Harita ---------------------------------------------------------------
+    have = np.isfinite(lat) & np.isfinite(lon)
+    highlight = None
+    if have.sum() >= 2:
+        values = {"power": kw, "alt": alt}.get(color_by, speed)
+        px, py, pv = lon[have], lat[have], values[have]
+        segments = np.stack(
+            [np.column_stack([px[:-1], py[:-1]]), np.column_stack([px[1:], py[1:]])], axis=1
+        )
+        scale = _route_scale(color_by, pv)
+        if scale is not None:
+            cmap, norm, label = scale
+            lines = LineCollection(segments, cmap=cmap, norm=norm, linewidths=2.4, capstyle="round")
+            lines.set_array(np.ma.masked_invalid(pv[:-1]))
+            ax_map.add_collection(lines)
+            bar = fig.colorbar(lines, ax=ax_map, shrink=0.6, pad=0.02)
+            bar.set_label(label)
+            bar.outline.set_edgecolor(theme.LINE)
+        else:
+            ax_map.add_collection(LineCollection(segments, colors=theme.ACCENT, linewidths=2.4))
+            ax_map.text(0.01, 0.99, i18n.t("route.no_color"), transform=ax_map.transAxes,
+                        va="top", fontsize=8, color=theme.MUTED)
+        ax_map.scatter([px[0]], [py[0]], s=60, color=theme.GREEN, edgecolors=theme.TEXT,
+                       zorder=4, label=i18n.t("route.start"))
+        ax_map.scatter([px[-1]], [py[-1]], s=60, marker="s", color=theme.RED,
+                       edgecolors=theme.TEXT, zorder=4, label=i18n.t("route.end"))
+        ax_map.legend(loc="lower right")
+        ax_map.autoscale_view()
+        # Boylamın bir derecesi enlemin cos'u kadar kısa: düzeltilmezse
+        # İstanbul'da doğu-batı yolları %30 uzun görünür.
+        mean_lat = float(np.mean(py))
+        ax_map.set_aspect(1.0 / max(math.cos(math.radians(mean_lat)), 0.01), adjustable="datalim")
+        ax_map.set_xlabel(i18n.t("route.lon"))
+        ax_map.set_ylabel(i18n.t("route.lat"))
+        ax_map.set_title(i18n.t("route.map.title"))
+        ax_map.ticklabel_format(useOffset=False)
+        highlight = ax_map.plot([], [], color=theme.TEXT, linewidth=7, alpha=0.45, zorder=1,
+                                solid_capstyle="round")[0]
+    else:
+        _no_data(ax_map, i18n.t("route.no_position"))
+
+    # --- İrtifa profili ---------------------------------------------------------
+    if np.isfinite(alt).any():
+        ax_alt.plot(x, alt, color=theme.MUTED, linewidth=0.8, alpha=0.7,
+                    label=i18n.t("route.alt.raw"))
+        ax_alt.plot(x, _smooth(alt, ALT_SMOOTH_POINTS), color=theme.PURPLE, linewidth=1.8,
+                    label=i18n.t("route.alt.smooth", n=ALT_SMOOTH_POINTS))
+        ax_alt.legend(loc="best")
+        ax_alt.set_ylabel(i18n.t("route.alt.ylabel"))
+    else:
+        _note(ax_alt, i18n.t("route.alt.none"))
+    ax_alt.set_title(i18n.t("route.alt.title"))
+
+    # --- Hız ------------------------------------------------------------------
+    if np.isfinite(speed).any():
+        _shade_regen(ax_speed, x, kw)
+        ax_speed.plot(x, speed, color=theme.ACCENT, linewidth=1.3, label=i18n.t("route.speed.car"))
+        if track.has("kmh") and track.has("gps_kmh"):
+            ax_speed.plot(x, track.array("gps_kmh"), color=theme.CYAN, linewidth=0.8, alpha=0.6,
+                          label=i18n.t("route.speed.gps"))
+        ax_speed.legend(loc="best")
+        ax_speed.set_ylabel(i18n.t("unit.speed"))
+    else:
+        _note(ax_speed, i18n.t("chart.no_speed"))
+    ax_speed.set_title(i18n.t("route.speed.title"))
+
+    # --- Güç: pozitif tüketim, negatif rejen --------------------------------------
+    if np.isfinite(kw).any():
+        use = np.where(np.isfinite(kw) & (kw >= 0), kw, np.nan)
+        regen = np.where(np.isfinite(kw) & (kw < 0), kw, np.nan)
+        ax_kw.fill_between(x, np.nan_to_num(use), 0, where=np.isfinite(use), color=theme.ORANGE,
+                           alpha=0.45, linewidth=0, step="mid", label=i18n.t("route.power.use"))
+        ax_kw.fill_between(x, np.nan_to_num(regen), 0, where=np.isfinite(regen), color=theme.GREEN,
+                           alpha=0.6, linewidth=0, step="mid", label=i18n.t("route.power.regen"))
+        ax_kw.plot(x, kw, color=theme.TEXT, linewidth=0.6, alpha=0.6)
+        ax_kw.axhline(0, color=theme.MUTED, linewidth=0.8)
+        ax_kw.legend(loc="best")
+        ax_kw.set_ylabel(i18n.t("route.power.ylabel"))
+    else:
+        _note(ax_kw, i18n.t("route.power.none"))
+    ax_kw.set_title(i18n.t("route.power.title"))
+    ax_kw.set_xlabel(i18n.t("route.distance"))
+    for ax in (ax_alt, ax_speed):
+        ax.tick_params(labelbottom=False)
+
+    if has_x:
+        full = (float(np.nanmin(x)), float(np.nanmax(x)))
+        if full[1] > full[0]:
+            ax_alt.set_xlim(*full)
+        if highlight is not None:
+            _link_highlight(ax_alt, highlight, x, lon, lat, full)
+
+
+def _link_highlight(ax, line: Line2D, x: np.ndarray, lon: np.ndarray, lat: np.ndarray,
+                    full: tuple[float, float]) -> None:
+    """Profiller yakınlaştırılınca haritada o mesafe aralığını vurgular.
+
+    Tkinter'a değil matplotlib'in kendi olayına bağlı (`xlim_changed`): araç
+    çubuğunun yakınlaştırması da, koddan `set_xlim` de aynı yolu izliyor. Tam
+    aralıkta vurgu kalkıyor — bütün rotayı kalın bir çizgiyle örtmesin.
+    """
+    span = full[1] - full[0]
+
+    def update(axis) -> None:
+        lo, hi = axis.get_xlim()
+        if span <= 0 or (lo <= full[0] + span * 0.001 and hi >= full[1] - span * 0.001):
+            line.set_data([], [])
+            return
+        inside = np.isfinite(x) & (x >= lo) & (x <= hi) & np.isfinite(lon) & np.isfinite(lat)
+        line.set_data(lon[inside], lat[inside])
+
+    ax.callbacks.connect("xlim_changed", update)

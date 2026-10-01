@@ -1,8 +1,7 @@
 """Kalıcı kullanıcı tercihleri (şimdilik yalnızca arayüz dili).
 
-Drive ayarlarıyla aynı klasörde, ayrı bir dosyada tutuluyor: `drive.json`
-anahtar içeriyor ve kullanıcı onu elle silebilmeli; dil seçimi onunla birlikte
-gitmesin.
+Google oturumuyla aynı klasörde, ayrı bir dosyada tutuluyor: `hesap.json`
+token içeriyor ve çıkışta siliniyor; dil seçimi onunla birlikte gitmesin.
 
 Tek dosya kipinde exe her açılışta geçici klasöre açıldığı için ayar exe'nin
 yanında tutulamıyor — bkz. `drive.config_dir`.

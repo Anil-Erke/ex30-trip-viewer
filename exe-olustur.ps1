@@ -169,6 +169,17 @@ if (Test-Path -LiteralPath $IconPath) {
     Uyari "Pillow yok; exe varsayılan simgeyle derlenecek."
 }
 
+# --- Google OAuth istemcisi ---------------------------------------------------
+
+# Masaüstü istemcisinin kimliği ve sırrı exe'ye gömülüyor (ex30trips\_oauth.py);
+# kaynak EX30 Telemetry\oauth.properties. İkisi de depoya girmez. Bu adım
+# düşerse exe Google'a giriş yapamaz — derlemeyi orada durduruyoruz.
+Adim "Google OAuth istemcisi"
+Py "araclar\oauth-gom.py"
+if ($LASTEXITCODE -ne 0) {
+    Dur "oauth.properties okunamadı (desktopClientId / desktopClientSecret). EX30 Telemetry klasörünü denetle ya da EX30_OAUTH_PROPERTIES ile yolu ver."
+}
+
 # --- Derleme ------------------------------------------------------------------
 
 Adim "Exe derleniyor"
@@ -184,7 +195,10 @@ $argListesi = @(
     # Konsol penceresi açılmasın: bu bir GUI uygulaması.
     "--windowed",
     # Örnek veri exe'nin içine gömülüyor; app.resource_path onu _MEIPASS'ten okuyor.
-    "--add-data", "ornek\trips-ornek.txt;ornek"
+    "--add-data", "ornek\trips-ornek.txt;ornek",
+    # auth.load_client onu try/except içinde içe aktarıyor; PyInstaller'ın
+    # gözden kaçırmaması için açıkça.
+    "--hidden-import", "ex30trips._oauth"
 )
 
 if (Test-Path -LiteralPath $IconPath) {
@@ -218,7 +232,7 @@ Basarili "Hazır: $exe  ($mb MB)"
 if (-not $Klasor) {
     Bilgi "Tek dosya kipinde ilk açılış birkaç saniye sürer; -Klasor anında açılır."
 }
-Bilgi "Kullanım: exe'yi çalıştır, 'Dosya ekle' ile trips-*.txt seç. İngilizce açmak için: --lang en"
+Bilgi "Kullanım: exe'yi çalıştır, Dosya → Google hesabı… ile araçtaki hesapla gir, 'Drive'dan al' (Ctrl+D). İngilizce açmak için: --lang en"
 
 if ($Calistir) {
     Adim "Açılıyor"
