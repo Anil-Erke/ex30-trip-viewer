@@ -204,7 +204,7 @@ STRINGS: dict[str, str] = {
     "drive.err.rate_limit": "Drive rate limit reached; try again in a moment.",
     "drive.err.not_found": "{name}: not found on Drive (it may have been deleted or trashed)",
     "drive.partial": "{n} {n|summary|summaries} could not be downloaded. The rest were saved; the cursor did not advance, so the next 'Fetch from Drive' retries the remainder.\n\n{errors}",
-    "drive.no_summaries": "There are no trips on this account's Drive yet.\n\nConnect the same Google account in EX30 Telemetry in the car (Measurement screen → Google account). When the account is connected the car sends all of its trips once; after that every trip arrives on its own when it ends.",
+    "drive.no_summaries": "There are no trips on this account's Drive yet.\n\nConnect the same Google account in EX30 Telemetry in the car (Settings → Google account). When the account is connected the car sends all of its trips once; after that every trip arrives on its own when it ends.",
     "drive.relogin": "{error}\n\nSign in to the Google account again?",
     "drive.migrated": "The Drive connection has changed.\n\nEX30 Telemetry in the car now writes trips to the Drive of the Google account connected in the car; the Apps Script address and read key are no longer used. The old Drive settings and cache were deleted — they held nothing that will not be downloaded again.\n\nSign in with the car's account via File → Google account….",
 

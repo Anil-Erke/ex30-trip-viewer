@@ -207,7 +207,7 @@ STRINGS: dict[str, str] = {
     "drive.err.rate_limit": "Drive istek sınırına takıldı; biraz sonra yeniden dene.",
     "drive.err.not_found": "{name}: Drive'da bulunamadı (silinmiş ya da çöpe atılmış olabilir)",
     "drive.partial": "{n} özet indirilemedi. İnenler kaydedildi; imleç ilerlemedi, bir sonraki 'Drive'dan al' kalanları yeniden dener.\n\n{errors}",
-    "drive.no_summaries": "Bu hesabın Drive'ında henüz yolculuk yok.\n\nAraçtaki EX30 Telemetry'de aynı Google hesabını bağla (Ölçüm ekranı → Google hesabı). Hesap bağlanınca araçtaki bütün yolculuklar bir kerelik gönderilir; sonra her yolculuk bitince kendiliğinden gelir.",
+    "drive.no_summaries": "Bu hesabın Drive'ında henüz yolculuk yok.\n\nAraçtaki EX30 Telemetry'de aynı Google hesabını bağla (Ayarlar → Google hesabı). Hesap bağlanınca araçtaki bütün yolculuklar bir kerelik gönderilir; sonra her yolculuk bitince kendiliğinden gelir.",
     "drive.relogin": "{error}\n\nGoogle hesabına yeniden giriş yapılsın mı?",
     "drive.migrated": "Drive bağlantısı yenilendi.\n\nAraçtaki EX30 Telemetry artık yolculukları, araçta bağladığın Google hesabının kendi Drive'ına yazıyor; Apps Script adresi ve okuma anahtarı kullanılmıyor. Eski Drive ayarı ve önbelleği silindi — içlerinde yeniden inmeyecek bir şey yoktu.\n\nDosya → Google hesabı… ile araçtaki hesapla giriş yap.",
 
