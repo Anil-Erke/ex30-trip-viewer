@@ -1196,7 +1196,7 @@ class TripViewer(tk.Tk):
         rows: list[tuple[str, str]] = [
             (t("detail.group.distance"), ""),
             (t("detail.gps_km"), f"{num(trip.distance_km, 2)} km"),
-            (t("detail.wheel_km"), f"{num(trip.wheel_distance_km, 2)} km"),
+            (t("detail.wheel_km"), f"{num(trip.wheel_distance_corrected_km, 2)} km"),
             (t("detail.gps_wheel"), num(trip.gps_wheel_ratio, 3)),
             (t("detail.duration"), trip.duration_text()),
             (t("detail.group.energy"), ""),
@@ -1416,7 +1416,7 @@ class TripViewer(tk.Tk):
                         i18n.csv_datetime(trip.end_dt),
                         trip.duration_sec,
                         cell(trip.distance_km, 3),
-                        cell(trip.wheel_distance_km, 3),
+                        cell(trip.wheel_distance_corrected_km, 3),
                         cell(trip.energy_kwh, 4),
                         cell(trip.regen_kwh, 4),
                         cell(trip.consumption, 2),

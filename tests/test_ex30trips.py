@@ -46,7 +46,7 @@ from ex30trips.loader import (  # noqa: E402
     merge,
     read_file,
 )
-from ex30trips.model import Trip  # noqa: E402
+from ex30trips.model import WHEEL_TICK_SCALE, Trip  # noqa: E402
 
 SAMPLE = ROOT / "ornek" / "trips-ornek.txt"
 
@@ -94,8 +94,32 @@ class ModelTests(unittest.TestCase):
         self.assertAlmostEqual(trip.regen_share, 25.0)
         self.assertAlmostEqual(trip.consumption, 15.0)  # kayıtta yok, türetildi
         self.assertAlmostEqual(trip.soc_drop, 4.0)
-        self.assertAlmostEqual(trip.gps_wheel_ratio, 10.0 / 10.2)
+        # Bölen DÜZELTİLMİŞ tekerlek mesafesi (araç ve Mobile ile aynı kural).
+        self.assertAlmostEqual(trip.wheel_distance_corrected_km, 10.2 * WHEEL_TICK_SCALE)
+        self.assertAlmostEqual(trip.gps_wheel_ratio, 10.0 / (10.2 * WHEEL_TICK_SCALE))
         self.assertEqual(trip.duration_text(), "6 dk 00 sn")
+
+    def test_wheel_distance_scale(self) -> None:
+        # Kayıttaki değer HAM kalır; düzeltme yalnızca türetilen değerlerde.
+        self.assertAlmostEqual(WHEEL_TICK_SCALE, 1.02536)
+        trip = Trip.from_json(
+            {"startEpoch": 1, "endEpoch": 2, "durationSec": 1, "distanceKm": 10.2536, "wheelDistanceKm": 10.0}
+        )
+        self.assertAlmostEqual(trip.wheel_distance_km, 10.0)
+        self.assertAlmostEqual(trip.wheel_distance_corrected_km, 10.2536)
+        # GPS düzeltilmiş tekerlekle birebir tutuyorsa oran tam 1,0 (eskiden ~1,025 çıkardı).
+        self.assertAlmostEqual(trip.gps_wheel_ratio, 1.0)
+        # Tekerlek mesafesi yoksa ya da sıfırsa oran yok.
+        no_wheel = Trip.from_json({"startEpoch": 1, "endEpoch": 2, "durationSec": 1, "distanceKm": 5.0})
+        self.assertIsNone(no_wheel.wheel_distance_corrected_km)
+        self.assertIsNone(no_wheel.gps_wheel_ratio)
+        zero = Trip.from_json(
+            {"startEpoch": 1, "endEpoch": 2, "durationSec": 1, "distanceKm": 5.0, "wheelDistanceKm": 0}
+        )
+        self.assertIsNone(zero.gps_wheel_ratio)
+        # Toplam da düzeltilmiş mesafeyi topluyor.
+        summary = stats.summarize([trip, no_wheel])
+        self.assertAlmostEqual(summary.total_wheel_km, 10.2536)
 
     def test_schema_1_record(self) -> None:
         """Şema 1'de ölçüm `seconds` alanındaydı; kayıt atılmamalı."""

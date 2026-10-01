@@ -241,6 +241,10 @@ Definitions match the in-car app (`TripStats.kt`, `RangeAuditor.kt`):
 - Bias above 1.0 means the range indicator was optimistic, below 1.0 pessimistic.
 - **Missing values are not turned into zero.** They show as "—", are not drawn and
   are left out of averages.
+- **The wheel distance is stored raw; × 1.02536 when displayed and in the GPS
+  ratio** (`model.WHEEL_TICK_SCALE`, the same constant as in the car and the
+  mobile app). Trip details, CSV and totals use the corrected value. Dividing by
+  the raw value would make the ratio about 2.5 % too high.
 
 ## Tests
 

@@ -7,6 +7,9 @@ Burada yalnızca hesaba giren kuralları tekrar ediyoruz:
   * `regen_kwh` pozitiftir; brüt tüketim = net + rejen.
   * `range_bias_factor` = (gösterge menzil düşüşü) ÷ (gidilen km).
     1,0 = gösterge tuttu, 1,0 üstü **iyimser**, altı **kötümser** — RangeAuditor.
+  * `wheel_distance_km` tekerlek tiklerinden gelen **HAM** mesafedir; gösterirken
+    ve GPS ile kıyaslarken `WHEEL_TICK_SCALE` ile çarpılır
+    (`wheel_distance_corrected_km`) — araçtaki TripAccumulator ve Mobile ile aynı.
   * Null alan normaldir: araç o property'yi vermediyse değer yazılmamıştır.
     Uydurma sıfır üretmiyoruz; grafikte o nokta hiç çizilmez.
 
@@ -21,6 +24,13 @@ from datetime import datetime, timedelta
 from typing import Any, Mapping
 
 from . import i18n
+
+#: Tekerlek tiklerinden gelen mesafenin ölçeği — araçtaki
+#: `Constants.WHEEL_TICK_SCALE` ve EX30 Trip Mobile'daki ile aynı değer.
+#: Kayıttaki `wheelDistanceKm` HAM saklanıyor, çarpan kayda gömülmüyor:
+#: sabit değişirse bütün geçmiş yeniden türetilebilsin. Değiştirilecekse
+#: üç uygulamada birlikte değişmeli.
+WHEEL_TICK_SCALE = 1.02536
 
 
 def _opt_float(o: Mapping[str, Any], key: str) -> float | None:
@@ -164,11 +174,23 @@ class Trip:
         return self.alt_gain_m - self.alt_loss_m
 
     @property
-    def gps_wheel_ratio(self) -> float | None:
-        """GPS mesafesi ÷ tekerlek mesafesi. 1,0'dan sapma GPS hatasıdır."""
-        if not self.wheel_distance_km or self.wheel_distance_km <= 0:
+    def wheel_distance_corrected_km(self) -> float | None:
+        """Tekerlek mesafesi, ölçek düzeltmesiyle — gösterilen ve kıyaslanan değer."""
+        if self.wheel_distance_km is None:
             return None
-        return self.distance_km / self.wheel_distance_km
+        return self.wheel_distance_km * WHEEL_TICK_SCALE
+
+    @property
+    def gps_wheel_ratio(self) -> float | None:
+        """GPS mesafesi ÷ **düzeltilmiş** tekerlek mesafesi. 1,0'dan sapma GPS hatasıdır.
+
+        Bölen ham değer olsaydı oran sistematik olarak ~%2,5 yüksek çıkardı
+        (araç ve Mobile düzeltilmiş değere bölüyor).
+        """
+        wheel = self.wheel_distance_corrected_km
+        if not wheel or wheel <= 0:
+            return None
+        return self.distance_km / wheel
 
     @property
     def label(self) -> str:

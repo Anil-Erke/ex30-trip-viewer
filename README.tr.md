@@ -366,6 +366,10 @@ Sayılar araçtaki hesapla aynı kalsın diye tanımlar `trip/TripStats.kt` ve
   görünüyor ve grafikte o nokta hiç çizilmiyor; ortalamalara da girmiyor.
 - **GPS mesafesi ile tekerlek mesafesi ayrı tutuluyor** (şema 3). İkisinin oranı
   GPS hatasının tek ölçüsü, o yüzden kendi grafiği var.
+- **Tekerlek mesafesi kayıtta HAM; gösterirken ve GPS oranında × 1,02536**
+  (`model.WHEEL_TICK_SCALE`, araçtaki ve Mobile'daki sabitle aynı). Detay sekmesi,
+  CSV ve toplamlar düzeltilmiş değeri kullanıyor. Oran ham değere bölünseydi
+  sistematik olarak ~%2,5 yüksek çıkardı.
 
 Birden çok dışa aktarım aynı anda açılabilir (çoklu seçim, klasör ya da
 birbirinin üstüne eklenen kaynaklar). Aynı yolculuk iki dosyada varsa
@@ -415,7 +419,7 @@ yüzden pencere açmadan PNG'ye basılabiliyor ve test edilebiliyor.
 py -3 -m unittest discover -s tests
 ```
 
-83 test: gerçek örnek dosyanın okunması, eksik alanların None kalması, şema 1
+84 test: gerçek örnek dosyanın okunması, eksik alanların None kalması, şema 1
 uyumluluğu, birleştirmede zengin kopyanın kazanması, bozuk dosyanın yüklemeyi
 düşürmemesi, kaynakların birikmesi, enerji ağırlıklı ortalama ve mesafe
 ağırlıklı menzil sapması.

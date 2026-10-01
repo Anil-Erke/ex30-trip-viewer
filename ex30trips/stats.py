@@ -46,6 +46,7 @@ class BandStat:
 class Summary:
     trip_count: int
     total_km: float
+    #: Düzeltilmiş tekerlek mesafesi toplamı (model.WHEEL_TICK_SCALE ile).
     total_wheel_km: float | None
     total_duration_sec: int
     total_energy_kwh: float
@@ -77,8 +78,8 @@ def summarize(trips: Sequence[Trip]) -> Summary:
         km += t.distance_km
         duration += t.duration_sec
         alt_gain += t.alt_gain_m
-        if t.wheel_distance_km is not None:
-            wheel_km += t.wheel_distance_km
+        if t.wheel_distance_corrected_km is not None:
+            wheel_km += t.wheel_distance_corrected_km
             wheel_seen = True
         if t.regen_kwh is not None:
             regen += t.regen_kwh
